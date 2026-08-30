@@ -1,0 +1,11 @@
+version: '3.8'
+
+services:
+  gateway:
+    image: alpine:latest
+    container_name: gateway
+    env_file:
+      - .env
+    command: ["sh", "-c", "echo 'Gateway service placeholder running...'; sleep infinity"]
+    ports:
+      - "8080:8080"

@@ -1,0 +1,41 @@
+run:
+  timeout: 5m
+  tests: true
+  concurrency: 4
+
+linters:
+  default: none
+  enable: 
+    - govet
+	- staticcheck
+	- errcheck
+	- gocritic
+	- gosec
+	- unconvert 
+	- gocyclo
+	- revive
+	- wrapcheck
+  settings:
+    wrapcheck:
+	  ignore-sigs:
+	    - .JSON
+		- .NewHTTPError
+		- .Redirect
+		- .NoContent
+		- .Errorf(
+		- errors.New(
+		- errors.Unwrap(
+		- .Wrap(
+		- .Wrapf(
+		- .WithMessage(
+		- .WithMessagef(
+		- .WithStack(
+	gocyclo: 
+	  min-complexity: 15
+	revive:
+	  severity: warning
+
+formatters:
+  enable:
+    - gofmt
+	- goimports
