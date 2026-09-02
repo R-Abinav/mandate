@@ -54,3 +54,27 @@ migrate-version:
 	migrate -path migrations \
 		-database "$$DATABASE_URL" \
 		version
+
+migrate-test-up:
+	@export $$(grep 'DATABASE_URL_TEST' .env | xargs) && \
+	migrate -path migrations \
+		-database "$$DATABASE_URL_TEST" \
+		up
+
+migrate-test-down:
+	@export $$(grep 'DATABASE_URL_TEST' .env | xargs) && \
+	migrate -path migrations \
+		-database "$$DATABASE_URL_TEST" \
+		down 1
+
+migrate-test-drop:
+	@export $$(grep 'DATABASE_URL_TEST' .env | xargs) && \
+	migrate -path migrations \
+		-database "$$DATABASE_URL_TEST" \
+		drop
+
+migrate-test-version:
+	@export $$(grep 'DATABASE_URL_TEST' .env | xargs) && \
+	migrate -path migrations \
+		-database "$$DATABASE_URL_TEST" \
+		version

@@ -1,41 +1,73 @@
-run:
-  timeout: 5m
-  tests: true
-  concurrency: 4
-
+version: "2"
 linters:
   default: none
-  enable: 
-    - govet
-    - staticcheck
+  enable:
+    - asciicheck
+    - bodyclose
+    - copyloopvar
     - errcheck
+    - forcetypeassert
+    - gocyclo
     - gocritic
     - gosec
-    - unconvert 
-    - gocyclo
+    - govet
+    - iface
+    - ineffassign
+    - interfacebloat
+    - makezero
+    - misspell
     - revive
-    - wrapcheck
+    - staticcheck
+    - unused
   settings:
-    wrapcheck:
-	    ignore-sigs:
-        - .JSON
-        - .NewHTTPError
-        - .Redirect
-        - .NoContent
-        - .Errorf(
-        - errors.New(
-        - errors.Unwrap(
-        - .Wrap(
-        - .Wrapf(
-        - .WithMessage(
-        - .WithMessagef(
-        - .WithStack(
-	gocyclo: 
-	  min-complexity: 15
-	revive:
-	  severity: warning
-
+    gocyclo:
+      min-complexity: 15
+    goconst:
+      min-len: 2
+      min-occurrences: 2
+    iface:
+      enable:
+        - opaque
+        - identical
+    interfacebloat:
+      max: 5
+    revive:
+      rules:
+        - name: blank-imports
+          disabled: true
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - path: (.+)\.go$
+        text: should have a package comment
+      - path: (.+)\.go$
+        text: 'unused-parameter:'
 formatters:
-  senable:
+  enable:
+    - gci
     - gofmt
-	  - goimports
+    - goimports
+    - golines
+  settings:
+    gci:
+      sections:
+        - standard
+        - default
+      custom-order: true
+    golines:
+      reformat-tags: false
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
