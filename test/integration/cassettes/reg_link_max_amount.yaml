@@ -1,0 +1,117 @@
+---
+version: 2
+interactions:
+    - id: 0
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 308
+        transfer_encoding: []
+        trailer: {}
+        host: api.razorpay.com
+        remote_addr: ""
+        request_uri: ""
+        body: '{"amount":100,"currency":"INR","customer":{"contact":"9000000001","email":"ceiling@example.com","name":"Ceiling Test User"},"description":"Mandate ceiling test — ₹2,000 cap","subscription_registration":{"expire_at":1791095177,"frequency":"as_presented","max_amount":200000,"method":"card"},"type":"link"}'
+        form: {}
+        headers:
+            Content-Type:
+                - application/json
+            User-Agent:
+                - razorpay-go/1.4.1
+        url: https://api.razorpay.com/v1/subscription_registration/auth_links
+        method: POST
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        transfer_encoding:
+            - chunked
+        trailer: {}
+        content_length: -1
+        uncompressed: false
+        body: '{"id":"inv_TXrOdYgUE1nACp","entity":"invoice","receipt":null,"invoice_number":null,"customer_id":"cust_TXrOdVVUuqIi8P","customer_details":{"id":"cust_TXrOdVVUuqIi8P","name":"Ceiling Test User","email":"ceiling@example.com","contact":"9000000001","gstin":null,"billing_address":null,"shipping_address":null,"customer_name":"Ceiling Test User","customer_email":"ceiling@example.com","customer_contact":"9000000001"},"order_id":"order_TXrOdg4tB3Zmi1","line_items":[],"payment_id":null,"status":"issued","expire_by":null,"issued_at":1788503178,"paid_at":null,"cancelled_at":null,"expired_at":null,"sms_status":"pending","email_status":"pending","date":1788503178,"terms":null,"partial_payment":false,"gross_amount":100,"tax_amount":0,"taxable_amount":0,"amount":100,"amount_paid":0,"amount_due":100,"currency":"INR","currency_symbol":"\u20b9","description":"Mandate ceiling test \u2014 \u20b92,000 cap","notes":[],"comment":null,"short_url":"https:\/\/rzp.io\/rzp\/zxjgrKGJ","view_less":true,"billing_start":null,"billing_end":null,"type":"link","group_taxes_discounts":false,"created_at":1788503178,"idempotency_key":null,"ref_num":null,"auth_link_status":"issued"}'
+        headers:
+            Cache-Control:
+                - max-age=0, must-revalidate, no-store, nocache, private
+            Connection:
+                - keep-alive
+            Content-Type:
+                - application/json
+            Date:
+                - Fri, 04 Sep 2026 06:26:18 GMT
+            Expires:
+                - Fri, 01 Jan 1990 00:00:00 GMT
+            Pragma:
+                - no-cache
+            Strict-Transport-Security:
+                - max-age=315360000; includeSubDomains
+            Via:
+                - rws
+            X-Frame-Options:
+                - SAMEORIGIN
+            X-Pam:
+                - "0"
+            X-Xss-Protection:
+                - "0"
+        status: 200 OK
+        code: 200
+        duration: 1.206442334s
+    - id: 1
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: api.razorpay.com
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers:
+            Content-Type:
+                - application/json
+            User-Agent:
+                - razorpay-go/1.4.1
+        url: https://api.razorpay.com/v1/orders/order_TXrOdg4tB3Zmi1
+        method: GET
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        transfer_encoding:
+            - chunked
+        trailer: {}
+        content_length: -1
+        uncompressed: false
+        body: '{"id":"order_TXrOdg4tB3Zmi1","entity":"order","amount":100,"amount_paid":0,"amount_due":100,"currency":"INR","receipt":null,"offer_id":null,"status":"created","attempts":0,"notes":[],"created_at":1788503178,"description":null,"checkout":null,"token":{"max_amount":200000,"expire_at":1791095177,"frequency":"as_presented"},"method":null}'
+        headers:
+            Cache-Control:
+                - max-age=0, must-revalidate, no-store, nocache, private
+            Connection:
+                - keep-alive
+            Content-Type:
+                - application/json
+            Date:
+                - Fri, 04 Sep 2026 06:26:20 GMT
+            Expires:
+                - Fri, 01 Jan 1990 00:00:00 GMT
+            Pragma:
+                - no-cache
+            Strict-Transport-Security:
+                - max-age=315360000; includeSubDomains
+            Uber-Trace-Id:
+                - 406e731e118050d8d8d5c0d48b3d78c0:15647f9db4193e1d:0000000000000000:1
+            Via:
+                - rws
+            X-Frame-Options:
+                - SAMEORIGIN
+            X-Pam:
+                - "0"
+            X-Xss-Protection:
+                - "0"
+        status: 200 OK
+        code: 200
+        duration: 485.957583ms

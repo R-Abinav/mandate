@@ -1,0 +1,1152 @@
+---
+version: 2
+interactions:
+    - id: 0
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 85
+        transfer_encoding: []
+        trailer: {}
+        host: api.razorpay.com
+        remote_addr: ""
+        request_uri: ""
+        body: '{"contact":"9004739000","email":"discovery@example.com","name":"Discovery Test User"}'
+        form: {}
+        headers:
+            Content-Type:
+                - application/json
+            User-Agent:
+                - razorpay-go/1.4.1
+        url: https://api.razorpay.com/v1/customers
+        method: POST
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        transfer_encoding: []
+        trailer: {}
+        content_length: 210
+        uncompressed: false
+        body: '{"id":"cust_TXrhXepAQFpm3Q", "entity":"customer", "name":"Discovery Test User", "email":"discovery@example.com", "contact":"9004739000", "gstin":null, "notes":[], "shipping_address":[], "created_at":1788504252}'
+        headers:
+            Connection:
+                - keep-alive
+            Content-Length:
+                - "210"
+            Content-Type:
+                - application/json
+            Date:
+                - Fri, 04 Sep 2026 06:44:12 GMT
+            Grpc-Metadata-Content-Type:
+                - application/grpc
+            Strict-Transport-Security:
+                - max-age=315360000; includeSubDomains
+            Via:
+                - rws
+            X-Xss-Protection:
+                - "0"
+        status: 200 OK
+        code: 200
+        duration: 335.603125ms
+    - id: 1
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: api.razorpay.com
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers:
+            Content-Type:
+                - application/json
+            User-Agent:
+                - razorpay-go/1.4.1
+        url: https://api.razorpay.com/v1/customers/cust_TXrhXepAQFpm3Q/tokens
+        method: GET
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        transfer_encoding:
+            - chunked
+        trailer: {}
+        content_length: -1
+        uncompressed: false
+        body: '{"entity":"collection","count":0,"items":[]}'
+        headers:
+            Cache-Control:
+                - max-age=0, must-revalidate, no-store, nocache, private
+            Connection:
+                - keep-alive
+            Content-Type:
+                - application/json
+            Date:
+                - Fri, 04 Sep 2026 06:44:13 GMT
+            Expires:
+                - Fri, 01 Jan 1990 00:00:00 GMT
+            Pragma:
+                - no-cache
+            Strict-Transport-Security:
+                - max-age=315360000; includeSubDomains
+            Uber-Trace-Id:
+                - 4bafea2ad4885c79a0d19c27613211ab:11f6314969a9e2bc:0000000000000000:1
+            Via:
+                - rws
+            X-Frame-Options:
+                - SAMEORIGIN
+            X-Pam:
+                - "0"
+            X-Xss-Protection:
+                - "0"
+        status: 200 OK
+        code: 200
+        duration: 538.140333ms
+    - id: 2
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 295
+        transfer_encoding: []
+        trailer: {}
+        host: api.razorpay.com
+        remote_addr: ""
+        request_uri: ""
+        body: '{"amount":100,"currency":"INR","customer":{"contact":"9004739000","email":"discovery@example.com","name":"Discovery Test User"},"description":"Token discovery test","subscription_registration":{"expire_at":1791096253,"frequency":"as_presented","max_amount":200000,"method":"card"},"type":"link"}'
+        form: {}
+        headers:
+            Content-Type:
+                - application/json
+            User-Agent:
+                - razorpay-go/1.4.1
+        url: https://api.razorpay.com/v1/subscription_registration/auth_links
+        method: POST
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        transfer_encoding:
+            - chunked
+        trailer: {}
+        content_length: -1
+        uncompressed: false
+        body: '{"id":"inv_TXrhZf6eVhyH9t","entity":"invoice","receipt":null,"invoice_number":null,"customer_id":"cust_TXrhXepAQFpm3Q","customer_details":{"id":"cust_TXrhXepAQFpm3Q","name":"Discovery Test User","email":"discovery@example.com","contact":"9004739000","gstin":null,"billing_address":null,"shipping_address":null,"customer_name":"Discovery Test User","customer_email":"discovery@example.com","customer_contact":"9004739000"},"order_id":"order_TXrhZnSpH1uhVK","line_items":[],"payment_id":null,"status":"issued","expire_by":null,"issued_at":1788504254,"paid_at":null,"cancelled_at":null,"expired_at":null,"sms_status":"pending","email_status":"pending","date":1788504253,"terms":null,"partial_payment":false,"gross_amount":100,"tax_amount":0,"taxable_amount":0,"amount":100,"amount_paid":0,"amount_due":100,"currency":"INR","currency_symbol":"\u20b9","description":"Token discovery test","notes":[],"comment":null,"short_url":"https:\/\/rzp.io\/rzp\/Q4hvWgfe","view_less":true,"billing_start":null,"billing_end":null,"type":"link","group_taxes_discounts":false,"created_at":1788504254,"idempotency_key":null,"ref_num":null,"auth_link_status":"issued"}'
+        headers:
+            Cache-Control:
+                - max-age=0, must-revalidate, no-store, nocache, private
+            Connection:
+                - keep-alive
+            Content-Type:
+                - application/json
+            Date:
+                - Fri, 04 Sep 2026 06:44:14 GMT
+            Expires:
+                - Fri, 01 Jan 1990 00:00:00 GMT
+            Pragma:
+                - no-cache
+            Strict-Transport-Security:
+                - max-age=315360000; includeSubDomains
+            Via:
+                - rws
+            X-Frame-Options:
+                - SAMEORIGIN
+            X-Pam:
+                - "0"
+            X-Xss-Protection:
+                - "0"
+        status: 200 OK
+        code: 200
+        duration: 899.35325ms
+    - id: 3
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: api.razorpay.com
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers:
+            Content-Type:
+                - application/json
+            User-Agent:
+                - razorpay-go/1.4.1
+        url: https://api.razorpay.com/v1/customers/cust_TXrhXepAQFpm3Q/tokens
+        method: GET
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        transfer_encoding:
+            - chunked
+        trailer: {}
+        content_length: -1
+        uncompressed: false
+        body: '{"entity":"collection","count":0,"items":[]}'
+        headers:
+            Cache-Control:
+                - max-age=0, must-revalidate, no-store, nocache, private
+            Connection:
+                - keep-alive
+            Content-Type:
+                - application/json
+            Date:
+                - Fri, 04 Sep 2026 06:44:15 GMT
+            Expires:
+                - Fri, 01 Jan 1990 00:00:00 GMT
+            Pragma:
+                - no-cache
+            Strict-Transport-Security:
+                - max-age=315360000; includeSubDomains
+            Uber-Trace-Id:
+                - 26b57395dc6946d22c6f2b0f15e583d2:b9cbfd308f108c4b:0000000000000000:1
+            Via:
+                - rws
+            X-Frame-Options:
+                - SAMEORIGIN
+            X-Pam:
+                - "0"
+            X-Xss-Protection:
+                - "0"
+        status: 200 OK
+        code: 200
+        duration: 622.635291ms
+    - id: 4
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: api.razorpay.com
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers:
+            Content-Type:
+                - application/json
+            User-Agent:
+                - razorpay-go/1.4.1
+        url: https://api.razorpay.com/v1/customers/cust_TXrhXepAQFpm3Q/tokens
+        method: GET
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        transfer_encoding:
+            - chunked
+        trailer: {}
+        content_length: -1
+        uncompressed: false
+        body: '{"entity":"collection","count":0,"items":[]}'
+        headers:
+            Cache-Control:
+                - max-age=0, must-revalidate, no-store, nocache, private
+            Connection:
+                - keep-alive
+            Content-Type:
+                - application/json
+            Date:
+                - Fri, 04 Sep 2026 06:44:18 GMT
+            Expires:
+                - Fri, 01 Jan 1990 00:00:00 GMT
+            Pragma:
+                - no-cache
+            Strict-Transport-Security:
+                - max-age=315360000; includeSubDomains
+            Uber-Trace-Id:
+                - 4b711f30684701d6f9ffcd0ca571bc31:22f144597a13e8e8:0000000000000000:1
+            Via:
+                - rws
+            X-Frame-Options:
+                - SAMEORIGIN
+            X-Pam:
+                - "0"
+            X-Xss-Protection:
+                - "0"
+        status: 200 OK
+        code: 200
+        duration: 578.19325ms
+    - id: 5
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: api.razorpay.com
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers:
+            Content-Type:
+                - application/json
+            User-Agent:
+                - razorpay-go/1.4.1
+        url: https://api.razorpay.com/v1/customers/cust_TXrhXepAQFpm3Q/tokens
+        method: GET
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        transfer_encoding:
+            - chunked
+        trailer: {}
+        content_length: -1
+        uncompressed: false
+        body: '{"entity":"collection","count":0,"items":[]}'
+        headers:
+            Cache-Control:
+                - max-age=0, must-revalidate, no-store, nocache, private
+            Connection:
+                - keep-alive
+            Content-Type:
+                - application/json
+            Date:
+                - Fri, 04 Sep 2026 06:44:21 GMT
+            Expires:
+                - Fri, 01 Jan 1990 00:00:00 GMT
+            Pragma:
+                - no-cache
+            Strict-Transport-Security:
+                - max-age=315360000; includeSubDomains
+            Uber-Trace-Id:
+                - 17ddb9221a136f23111e7b4a61471f51:26e981f6d8705dc2:0000000000000000:1
+            Via:
+                - rws
+            X-Frame-Options:
+                - SAMEORIGIN
+            X-Pam:
+                - "0"
+            X-Xss-Protection:
+                - "0"
+        status: 200 OK
+        code: 200
+        duration: 626.128625ms
+    - id: 6
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: api.razorpay.com
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers:
+            Content-Type:
+                - application/json
+            User-Agent:
+                - razorpay-go/1.4.1
+        url: https://api.razorpay.com/v1/customers/cust_TXrhXepAQFpm3Q/tokens
+        method: GET
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        transfer_encoding:
+            - chunked
+        trailer: {}
+        content_length: -1
+        uncompressed: false
+        body: '{"entity":"collection","count":0,"items":[]}'
+        headers:
+            Cache-Control:
+                - max-age=0, must-revalidate, no-store, nocache, private
+            Connection:
+                - keep-alive
+            Content-Type:
+                - application/json
+            Date:
+                - Fri, 04 Sep 2026 06:44:24 GMT
+            Expires:
+                - Fri, 01 Jan 1990 00:00:00 GMT
+            Pragma:
+                - no-cache
+            Strict-Transport-Security:
+                - max-age=315360000; includeSubDomains
+            Uber-Trace-Id:
+                - 4de8da8668e2794c46123d29f1cc827e:3b35aab6ed735c19:0000000000000000:1
+            Via:
+                - rws
+            X-Frame-Options:
+                - SAMEORIGIN
+            X-Pam:
+                - "0"
+            X-Xss-Protection:
+                - "0"
+        status: 200 OK
+        code: 200
+        duration: 425.553167ms
+    - id: 7
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: api.razorpay.com
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers:
+            Content-Type:
+                - application/json
+            User-Agent:
+                - razorpay-go/1.4.1
+        url: https://api.razorpay.com/v1/customers/cust_TXrhXepAQFpm3Q/tokens
+        method: GET
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        transfer_encoding:
+            - chunked
+        trailer: {}
+        content_length: -1
+        uncompressed: false
+        body: '{"entity":"collection","count":0,"items":[]}'
+        headers:
+            Cache-Control:
+                - max-age=0, must-revalidate, no-store, nocache, private
+            Connection:
+                - keep-alive
+            Content-Type:
+                - application/json
+            Date:
+                - Fri, 04 Sep 2026 06:44:27 GMT
+            Expires:
+                - Fri, 01 Jan 1990 00:00:00 GMT
+            Pragma:
+                - no-cache
+            Strict-Transport-Security:
+                - max-age=315360000; includeSubDomains
+            Uber-Trace-Id:
+                - d348cd2548084f60bee0460c53c32d2d:bcb70a5befd880c4:0000000000000000:1
+            Via:
+                - rws
+            X-Frame-Options:
+                - SAMEORIGIN
+            X-Pam:
+                - "0"
+            X-Xss-Protection:
+                - "0"
+        status: 200 OK
+        code: 200
+        duration: 537.9785ms
+    - id: 8
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: api.razorpay.com
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers:
+            Content-Type:
+                - application/json
+            User-Agent:
+                - razorpay-go/1.4.1
+        url: https://api.razorpay.com/v1/customers/cust_TXrhXepAQFpm3Q/tokens
+        method: GET
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        transfer_encoding:
+            - chunked
+        trailer: {}
+        content_length: -1
+        uncompressed: false
+        body: '{"entity":"collection","count":0,"items":[]}'
+        headers:
+            Cache-Control:
+                - max-age=0, must-revalidate, no-store, nocache, private
+            Connection:
+                - keep-alive
+            Content-Type:
+                - application/json
+            Date:
+                - Fri, 04 Sep 2026 06:44:30 GMT
+            Expires:
+                - Fri, 01 Jan 1990 00:00:00 GMT
+            Pragma:
+                - no-cache
+            Strict-Transport-Security:
+                - max-age=315360000; includeSubDomains
+            Uber-Trace-Id:
+                - e9a2bceb162c6e876dec470e06768c20:3535ec18bda77f13:0000000000000000:1
+            Via:
+                - rws
+            X-Frame-Options:
+                - SAMEORIGIN
+            X-Pam:
+                - "0"
+            X-Xss-Protection:
+                - "0"
+        status: 200 OK
+        code: 200
+        duration: 492.547ms
+    - id: 9
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: api.razorpay.com
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers:
+            Content-Type:
+                - application/json
+            User-Agent:
+                - razorpay-go/1.4.1
+        url: https://api.razorpay.com/v1/customers/cust_TXrhXepAQFpm3Q/tokens
+        method: GET
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        transfer_encoding:
+            - chunked
+        trailer: {}
+        content_length: -1
+        uncompressed: false
+        body: '{"entity":"collection","count":0,"items":[]}'
+        headers:
+            Cache-Control:
+                - max-age=0, must-revalidate, no-store, nocache, private
+            Connection:
+                - keep-alive
+            Content-Type:
+                - application/json
+            Date:
+                - Fri, 04 Sep 2026 06:44:33 GMT
+            Expires:
+                - Fri, 01 Jan 1990 00:00:00 GMT
+            Pragma:
+                - no-cache
+            Strict-Transport-Security:
+                - max-age=315360000; includeSubDomains
+            Uber-Trace-Id:
+                - ee8842924711bf7a1bcd37da412fcc72:0431918949284fa0:0000000000000000:1
+            Via:
+                - rws
+            X-Frame-Options:
+                - SAMEORIGIN
+            X-Pam:
+                - "0"
+            X-Xss-Protection:
+                - "0"
+        status: 200 OK
+        code: 200
+        duration: 440.729959ms
+    - id: 10
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: api.razorpay.com
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers:
+            Content-Type:
+                - application/json
+            User-Agent:
+                - razorpay-go/1.4.1
+        url: https://api.razorpay.com/v1/customers/cust_TXrhXepAQFpm3Q/tokens
+        method: GET
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        transfer_encoding:
+            - chunked
+        trailer: {}
+        content_length: -1
+        uncompressed: false
+        body: '{"entity":"collection","count":0,"items":[]}'
+        headers:
+            Cache-Control:
+                - max-age=0, must-revalidate, no-store, nocache, private
+            Connection:
+                - keep-alive
+            Content-Type:
+                - application/json
+            Date:
+                - Fri, 04 Sep 2026 06:44:36 GMT
+            Expires:
+                - Fri, 01 Jan 1990 00:00:00 GMT
+            Pragma:
+                - no-cache
+            Strict-Transport-Security:
+                - max-age=315360000; includeSubDomains
+            Uber-Trace-Id:
+                - 826339ff59a154f6a8d8517b8785071d:144f10bc933877b6:0000000000000000:1
+            Via:
+                - rws
+            X-Frame-Options:
+                - SAMEORIGIN
+            X-Pam:
+                - "0"
+            X-Xss-Protection:
+                - "0"
+        status: 200 OK
+        code: 200
+        duration: 425.253959ms
+    - id: 11
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: api.razorpay.com
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers:
+            Content-Type:
+                - application/json
+            User-Agent:
+                - razorpay-go/1.4.1
+        url: https://api.razorpay.com/v1/customers/cust_TXrhXepAQFpm3Q/tokens
+        method: GET
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        transfer_encoding:
+            - chunked
+        trailer: {}
+        content_length: -1
+        uncompressed: false
+        body: '{"entity":"collection","count":0,"items":[]}'
+        headers:
+            Cache-Control:
+                - max-age=0, must-revalidate, no-store, nocache, private
+            Connection:
+                - keep-alive
+            Content-Type:
+                - application/json
+            Date:
+                - Fri, 04 Sep 2026 06:44:39 GMT
+            Expires:
+                - Fri, 01 Jan 1990 00:00:00 GMT
+            Pragma:
+                - no-cache
+            Strict-Transport-Security:
+                - max-age=315360000; includeSubDomains
+            Uber-Trace-Id:
+                - ef3ad6a317a78e06149aa7816e11b767:b8861cbee8c47a28:0000000000000000:1
+            Via:
+                - rws
+            X-Frame-Options:
+                - SAMEORIGIN
+            X-Pam:
+                - "0"
+            X-Xss-Protection:
+                - "0"
+        status: 200 OK
+        code: 200
+        duration: 439.19975ms
+    - id: 12
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: api.razorpay.com
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers:
+            Content-Type:
+                - application/json
+            User-Agent:
+                - razorpay-go/1.4.1
+        url: https://api.razorpay.com/v1/customers/cust_TXrhXepAQFpm3Q/tokens
+        method: GET
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        transfer_encoding:
+            - chunked
+        trailer: {}
+        content_length: -1
+        uncompressed: false
+        body: '{"entity":"collection","count":0,"items":[]}'
+        headers:
+            Cache-Control:
+                - max-age=0, must-revalidate, no-store, nocache, private
+            Connection:
+                - keep-alive
+            Content-Type:
+                - application/json
+            Date:
+                - Fri, 04 Sep 2026 06:44:43 GMT
+            Expires:
+                - Fri, 01 Jan 1990 00:00:00 GMT
+            Pragma:
+                - no-cache
+            Strict-Transport-Security:
+                - max-age=315360000; includeSubDomains
+            Uber-Trace-Id:
+                - 8e6f07413b80ea0bfe8822aa248696ce:ed34c525a26284ea:0000000000000000:1
+            Via:
+                - rws
+            X-Frame-Options:
+                - SAMEORIGIN
+            X-Pam:
+                - "0"
+            X-Xss-Protection:
+                - "0"
+        status: 200 OK
+        code: 200
+        duration: 819.148708ms
+    - id: 13
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: api.razorpay.com
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers:
+            Content-Type:
+                - application/json
+            User-Agent:
+                - razorpay-go/1.4.1
+        url: https://api.razorpay.com/v1/customers/cust_TXrhXepAQFpm3Q/tokens
+        method: GET
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        transfer_encoding:
+            - chunked
+        trailer: {}
+        content_length: -1
+        uncompressed: false
+        body: '{"entity":"collection","count":0,"items":[]}'
+        headers:
+            Cache-Control:
+                - max-age=0, must-revalidate, no-store, nocache, private
+            Connection:
+                - keep-alive
+            Content-Type:
+                - application/json
+            Date:
+                - Fri, 04 Sep 2026 06:44:46 GMT
+            Expires:
+                - Fri, 01 Jan 1990 00:00:00 GMT
+            Pragma:
+                - no-cache
+            Strict-Transport-Security:
+                - max-age=315360000; includeSubDomains
+            Uber-Trace-Id:
+                - 02148156d2ac6bbdbb4323cc2758ddb0:4c95d6d067bb2be8:0000000000000000:1
+            Via:
+                - rws
+            X-Frame-Options:
+                - SAMEORIGIN
+            X-Pam:
+                - "0"
+            X-Xss-Protection:
+                - "0"
+        status: 200 OK
+        code: 200
+        duration: 754.522541ms
+    - id: 14
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: api.razorpay.com
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers:
+            Content-Type:
+                - application/json
+            User-Agent:
+                - razorpay-go/1.4.1
+        url: https://api.razorpay.com/v1/customers/cust_TXrhXepAQFpm3Q/tokens
+        method: GET
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        transfer_encoding:
+            - chunked
+        trailer: {}
+        content_length: -1
+        uncompressed: false
+        body: '{"entity":"collection","count":0,"items":[]}'
+        headers:
+            Cache-Control:
+                - max-age=0, must-revalidate, no-store, nocache, private
+            Connection:
+                - keep-alive
+            Content-Type:
+                - application/json
+            Date:
+                - Fri, 04 Sep 2026 06:44:48 GMT
+            Expires:
+                - Fri, 01 Jan 1990 00:00:00 GMT
+            Pragma:
+                - no-cache
+            Strict-Transport-Security:
+                - max-age=315360000; includeSubDomains
+            Uber-Trace-Id:
+                - 986351852bcd89aba93de5f4e3995a9d:4c312469291d9629:0000000000000000:1
+            Via:
+                - rws
+            X-Frame-Options:
+                - SAMEORIGIN
+            X-Pam:
+                - "0"
+            X-Xss-Protection:
+                - "0"
+        status: 200 OK
+        code: 200
+        duration: 514.338917ms
+    - id: 15
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: api.razorpay.com
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers:
+            Content-Type:
+                - application/json
+            User-Agent:
+                - razorpay-go/1.4.1
+        url: https://api.razorpay.com/v1/customers/cust_TXrhXepAQFpm3Q/tokens
+        method: GET
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        transfer_encoding:
+            - chunked
+        trailer: {}
+        content_length: -1
+        uncompressed: false
+        body: '{"entity":"collection","count":0,"items":[]}'
+        headers:
+            Cache-Control:
+                - max-age=0, must-revalidate, no-store, nocache, private
+            Connection:
+                - keep-alive
+            Content-Type:
+                - application/json
+            Date:
+                - Fri, 04 Sep 2026 06:44:51 GMT
+            Expires:
+                - Fri, 01 Jan 1990 00:00:00 GMT
+            Pragma:
+                - no-cache
+            Strict-Transport-Security:
+                - max-age=315360000; includeSubDomains
+            Uber-Trace-Id:
+                - eee7f49f4ad4764f5cc5c29cbc38123a:2bd9eeebed591c46:0000000000000000:1
+            Via:
+                - rws
+            X-Frame-Options:
+                - SAMEORIGIN
+            X-Pam:
+                - "0"
+            X-Xss-Protection:
+                - "0"
+        status: 200 OK
+        code: 200
+        duration: 542.041541ms
+    - id: 16
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: api.razorpay.com
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers:
+            Content-Type:
+                - application/json
+            User-Agent:
+                - razorpay-go/1.4.1
+        url: https://api.razorpay.com/v1/customers/cust_TXrhXepAQFpm3Q/tokens
+        method: GET
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        transfer_encoding:
+            - chunked
+        trailer: {}
+        content_length: -1
+        uncompressed: false
+        body: '{"entity":"collection","count":0,"items":[]}'
+        headers:
+            Cache-Control:
+                - max-age=0, must-revalidate, no-store, nocache, private
+            Connection:
+                - keep-alive
+            Content-Type:
+                - application/json
+            Date:
+                - Fri, 04 Sep 2026 06:44:54 GMT
+            Expires:
+                - Fri, 01 Jan 1990 00:00:00 GMT
+            Pragma:
+                - no-cache
+            Strict-Transport-Security:
+                - max-age=315360000; includeSubDomains
+            Uber-Trace-Id:
+                - 11be377dfd8e4597aa2f003fe7bd29c7:799f6bf7ef6d57b9:0000000000000000:1
+            Via:
+                - rws
+            X-Frame-Options:
+                - SAMEORIGIN
+            X-Pam:
+                - "0"
+            X-Xss-Protection:
+                - "0"
+        status: 200 OK
+        code: 200
+        duration: 579.944833ms
+    - id: 17
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: api.razorpay.com
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers:
+            Content-Type:
+                - application/json
+            User-Agent:
+                - razorpay-go/1.4.1
+        url: https://api.razorpay.com/v1/customers/cust_TXrhXepAQFpm3Q/tokens
+        method: GET
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        transfer_encoding:
+            - chunked
+        trailer: {}
+        content_length: -1
+        uncompressed: false
+        body: '{"entity":"collection","count":0,"items":[]}'
+        headers:
+            Cache-Control:
+                - max-age=0, must-revalidate, no-store, nocache, private
+            Connection:
+                - keep-alive
+            Content-Type:
+                - application/json
+            Date:
+                - Fri, 04 Sep 2026 06:44:57 GMT
+            Expires:
+                - Fri, 01 Jan 1990 00:00:00 GMT
+            Pragma:
+                - no-cache
+            Strict-Transport-Security:
+                - max-age=315360000; includeSubDomains
+            Uber-Trace-Id:
+                - 8e3220df5407c8483f51d9da098b9063:23fcbbffad5f2418:0000000000000000:1
+            Via:
+                - rws
+            X-Frame-Options:
+                - SAMEORIGIN
+            X-Pam:
+                - "0"
+            X-Xss-Protection:
+                - "0"
+        status: 200 OK
+        code: 200
+        duration: 458.307ms
+    - id: 18
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: api.razorpay.com
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers:
+            Content-Type:
+                - application/json
+            User-Agent:
+                - razorpay-go/1.4.1
+        url: https://api.razorpay.com/v1/customers/cust_TXrhXepAQFpm3Q/tokens
+        method: GET
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        transfer_encoding:
+            - chunked
+        trailer: {}
+        content_length: -1
+        uncompressed: false
+        body: '{"entity":"collection","count":0,"items":[]}'
+        headers:
+            Cache-Control:
+                - max-age=0, must-revalidate, no-store, nocache, private
+            Connection:
+                - keep-alive
+            Content-Type:
+                - application/json
+            Date:
+                - Fri, 04 Sep 2026 06:45:00 GMT
+            Expires:
+                - Fri, 01 Jan 1990 00:00:00 GMT
+            Pragma:
+                - no-cache
+            Strict-Transport-Security:
+                - max-age=315360000; includeSubDomains
+            Uber-Trace-Id:
+                - 49a671f22fff6a77ac7c975b99fed67a:e23c2958ba23144e:0000000000000000:1
+            Via:
+                - rws
+            X-Frame-Options:
+                - SAMEORIGIN
+            X-Pam:
+                - "0"
+            X-Xss-Protection:
+                - "0"
+        status: 200 OK
+        code: 200
+        duration: 451.50975ms
+    - id: 19
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: api.razorpay.com
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers:
+            Content-Type:
+                - application/json
+            User-Agent:
+                - razorpay-go/1.4.1
+        url: https://api.razorpay.com/v1/customers/cust_TXrhXepAQFpm3Q/tokens
+        method: GET
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        transfer_encoding:
+            - chunked
+        trailer: {}
+        content_length: -1
+        uncompressed: false
+        body: '{"entity":"collection","count":1,"items":[{"id":"token_TXriCwptx38v9J","entity":"token","token":"HwYnrnhGZg5u75","bank":null,"wallet":null,"method":"card","card":{"entity":"card","name":"","last4":"4366","network":"Visa","type":"credit","issuer":"UTIB","international":false,"emi":true,"sub_type":"consumer","token_iin":"471860910","expiry_month":"01","expiry_year":"2099","flows":{"otp":true,"recurring":true},"cobranding_partner":null},"vpa":null,"recurring":true,"recurring_details":{"status":"confirmed","failure_reason":null},"auth_type":null,"mrn":null,"used_at":1788504290,"created_at":1788504289,"expired_at":1790792999,"status":"failed","notes":[],"error_description":null,"source":"business","entity_id":null,"dcc_enabled":false,"max_amount":200000,"error_code":null,"compliant_with_tokenisation_guidelines":true}]}'
+        headers:
+            Cache-Control:
+                - max-age=0, must-revalidate, no-store, nocache, private
+            Connection:
+                - keep-alive
+            Content-Type:
+                - application/json
+            Date:
+                - Fri, 04 Sep 2026 06:45:04 GMT
+            Expires:
+                - Fri, 01 Jan 1990 00:00:00 GMT
+            Pragma:
+                - no-cache
+            Strict-Transport-Security:
+                - max-age=315360000; includeSubDomains
+            Uber-Trace-Id:
+                - 34af5913cf4b408f7fa52909fcb0049d:13dd1fa2431c9285:0000000000000000:1
+            Via:
+                - rws
+            X-Frame-Options:
+                - SAMEORIGIN
+            X-Pam:
+                - "0"
+            X-Xss-Protection:
+                - "0"
+        status: 200 OK
+        code: 200
+        duration: 913.851208ms

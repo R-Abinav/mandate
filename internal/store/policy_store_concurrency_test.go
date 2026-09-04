@@ -64,7 +64,7 @@ func TestPolicyStore_Concurrency(t *testing.T) {
 		_, _ = db.ExecContext(ctx, "DELETE FROM policies WHERE id = $1", policyID)
 	}()
 
-	numGoroutines := 150
+	numGoroutines := 500
 	debitAmount := int64(1_000)                             // 1,000 paise each
 	expectedSuccesses := int64(cumulativeCap / debitAmount) // Exactly 100 should succeed
 
@@ -150,5 +150,76 @@ func TestPolicyStore_Concurrency(t *testing.T) {
 
 	if int64(actualRows) != expectedSuccesses {
 		t.Errorf("Expected %d rows in ledger, got %d", expectedSuccesses, actualRows)
+	}
+}
+
+// TestPolicyStore_Idempotency_Integration proves the ON CONFLICT DO NOTHING
+// database constraint works at the SQL layer, ensuring identical request_ids
+// are safely replayed without double-counting the cumulative cap.
+func TestPolicyStore_Idempotency_Integration(t *testing.T) {
+	cfg := config.Load()
+	if cfg.DatabaseURLTest == "" {
+		t.Fatal("DATABASE_URL_TEST is required for integration tests")
+	}
+
+	db, err := sql.Open("postgres", cfg.DatabaseURLTest)
+	if err != nil {
+		t.Fatalf("failed to open database: %v", err)
+	}
+	defer db.Close()
+	db.SetMaxOpenConns(cfg.DatabaseMaxOpenConnections)
+
+	s := store.NewPostgresPolicyStore(db)
+	ctx := context.Background()
+
+	policyID := fmt.Sprintf("pol-idem-%d", time.Now().UnixNano())
+
+	_, err = db.ExecContext(ctx, `
+		INSERT INTO policies (id, agent_id, per_debit_cap_paise, cumulative_cap_paise, window_seconds, allowed_categories, expires_at, max_call_count)
+		VALUES ($1, 'agent-1', 1000, 5000, 86400, '{"cloud"}', NOW() + INTERVAL '1 day', 10)
+	`, policyID)
+	if err != nil {
+		t.Fatalf("failed to seed test policy: %v", err)
+	}
+
+	defer func() {
+		_, _ = db.ExecContext(ctx, "DELETE FROM debit_ledger WHERE policy_id = $1", policyID)
+		_, _ = db.ExecContext(ctx, "DELETE FROM policies WHERE id = $1", policyID)
+	}()
+
+	req := policy.DebitRequest{
+		PolicyID:    policyID,
+		RequestID:   "idem-req-1",
+		AgentID:     "agent-1",
+		Category:    "cloud",
+		AmountPaise: 500,
+	}
+
+	// First attempt - should succeed
+	dec1, err := s.TryRecordDebit(ctx, req, 86400, 5000, 10)
+	if err != nil {
+		t.Fatalf("First attempt failed: %v", err)
+	}
+	if !dec1.Allowed {
+		t.Fatalf("First attempt denied: %s", dec1.Reason)
+	}
+
+	// Second attempt (exact same request_id) - must return success via ON CONFLICT
+	dec2, err := s.TryRecordDebit(ctx, req, 86400, 5000, 10)
+	if err != nil {
+		t.Fatalf("Second attempt failed: %v", err)
+	}
+	if !dec2.Allowed {
+		t.Fatalf("Second attempt denied: %s", dec2.Reason)
+	}
+
+	// Verify only 1 row exists in the database
+	var count int
+	err = db.QueryRowContext(ctx, "SELECT COUNT(*) FROM debit_ledger WHERE policy_id = $1", policyID).Scan(&count)
+	if err != nil {
+		t.Fatalf("Failed to query ledger count: %v", err)
+	}
+	if count != 1 {
+		t.Errorf("Expected exactly 1 row in debit_ledger, got %d. Idempotency constraint failed!", count)
 	}
 }
