@@ -15,6 +15,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/R-Abinav/mandate/internal/audit"
 	"github.com/R-Abinav/mandate/internal/config"
 	"github.com/R-Abinav/mandate/internal/gateway"
 	"github.com/R-Abinav/mandate/internal/store"
@@ -72,6 +73,7 @@ func run() error {
 	}
 
 	policyStore := store.NewPostgresPolicyStore(db)
+	auditStore := audit.NewPostgresStore(db)
 
 	pol, err := policyStore.GetPolicy(context.Background(), policyID)
 	if err != nil {
@@ -82,13 +84,15 @@ func run() error {
 	// project. PolicyRoundTripper is installed as client.HTTPClient's
 	// Transport — client.HTTPClient is a promoted field from the SDK's
 	// embedded *requests.Request (not client.Client) — before any
-	// internal/mandate call ever fires, so every write it makes is gated.
+	// internal/mandate call ever fires, so every write it makes is gated
+	// and every decision is recorded to the hash-chained audit log.
 	client := razorpay.NewClient(cfg.RazorpayKeyID, cfg.RazorpayKeySecret)
 	client.HTTPClient = &http.Client{
 		Transport: &gateway.PolicyRoundTripper{
-			Policy: pol,
-			Store:  policyStore,
-			Next:   http.DefaultTransport,
+			Policy:     pol,
+			Store:      policyStore,
+			AuditStore: auditStore,
+			Next:       http.DefaultTransport,
 		},
 	}
 

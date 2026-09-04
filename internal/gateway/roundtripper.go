@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -10,6 +11,7 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/R-Abinav/mandate/internal/audit"
 	"github.com/R-Abinav/mandate/internal/policy"
 )
 
@@ -30,6 +32,16 @@ type PolicyRoundTripper struct {
 
 	// Store is the policy data store TryRecordDebit is delegated to.
 	Store policy.Store
+
+	// AuditStore is the hash-chained decision log (internal/audit). Optional
+	// — nil disables audit logging entirely (the RoundTripper still
+	// enforces policy; it just doesn't record a chain), preserving
+	// backward compatibility for callers that predate this field. When
+	// set, every decision this RoundTripper makes is recorded: LogIntent
+	// immediately before an allowed request is forwarded, LogOutcome once
+	// the real response comes back, or a single LogResolved entry for a
+	// denial — see docs/adr/0005_audit_trail.md.
+	AuditStore audit.Store
 
 	// Next is the underlying transport recognized writes are forwarded to
 	// on allow. Defaults to http.DefaultTransport if nil.
@@ -78,6 +90,20 @@ func (p *PolicyRoundTripper) RoundTrip(req *http.Request) (*http.Response, error
 		return p.next().RoundTrip(req)
 	}
 
+	// Prefer the caller's real idempotency key (notes.mandate_request_id —
+	// both known categories send it, per Classify's doc comment). The
+	// content hash is a last-resort fallback, not the default: a genuine
+	// retry with a real request_id must dedupe on that ID, not on the body,
+	// which changes on every retry (a regenerated order_id or link). It is
+	// only reached if a caller leaves its RequestID field unset — a caller
+	// bug at that point, not a gap in either endpoint. Computed before the
+	// !ok branch too, since even an unrecognized write's audit entry should
+	// carry the real request_id when one was present on the wire.
+	auditRequestID := requestID
+	if auditRequestID == "" {
+		auditRequestID = contentIdempotencyKey(bodyBytes)
+	}
+
 	if !ok {
 		p.logDecision(
 			req,
@@ -86,19 +112,19 @@ func (p *PolicyRoundTripper) RoundTrip(req *http.Request) (*http.Response, error
 			policy.Decision{Allowed: false, Reason: "unrecognized_write"},
 			nil,
 		)
+		p.logResolved(req.Context(), audit.Payload{
+			RequestID:   auditRequestID,
+			PolicyID:    p.Policy.ID,
+			AgentID:     p.Policy.AgentID,
+			Category:    category,
+			AmountPaise: amountPaise,
+			Decision:    audit.DecisionDenied,
+			Reason:      "unrecognized_write",
+		})
 		return syntheticDenialResponse(req, "unrecognized_write"), nil
 	}
 
-	// Prefer the caller's real idempotency key (notes.mandate_request_id —
-	// both known categories send it, per Classify's doc comment). The
-	// content hash is a last-resort fallback, not the default: a genuine
-	// retry with a real request_id must dedupe on that ID, not on the body,
-	// which changes on every retry (a regenerated order_id or link). It is
-	// only reached if a caller leaves its RequestID field unset — a caller
-	// bug at that point, not a gap in either endpoint.
-	if requestID == "" {
-		requestID = contentIdempotencyKey(bodyBytes)
-	}
+	requestID = auditRequestID
 
 	debitReq := policy.DebitRequest{
 		PolicyID:    p.Policy.ID,
@@ -108,6 +134,12 @@ func (p *PolicyRoundTripper) RoundTrip(req *http.Request) (*http.Response, error
 		AmountPaise: amountPaise,
 	}
 
+	// policy.Evaluate runs and returns here — TryRecordDebit's advisory-lock
+	// transaction (ADR-0002 Decision 6) has fully begun, committed or
+	// rolled back, and ended by the time this call returns. Every audit
+	// call below (logResolved, LogIntent) happens strictly after this line,
+	// by construction: Go's synchronous call semantics mean nothing past
+	// this point can execute while Evaluate's transaction is still open.
 	decision, err := policy.Evaluate(req.Context(), debitReq, p.Policy, p.Store)
 	if err != nil {
 		// err != nil means "we don't know" (ADR-0002): a system failure —
@@ -118,16 +150,107 @@ func (p *PolicyRoundTripper) RoundTrip(req *http.Request) (*http.Response, error
 		// status code was flagged as a real defect against ADR-0002's own
 		// stated design and fixed here, not left as a judgment call.
 		p.logDecision(req, category, amountPaise, policy.Decision{}, err)
+		p.logResolved(req.Context(), audit.Payload{
+			RequestID:   requestID,
+			PolicyID:    p.Policy.ID,
+			AgentID:     p.Policy.AgentID,
+			Category:    category,
+			AmountPaise: amountPaise,
+			Decision:    audit.DecisionSystemError,
+			Reason:      err.Error(),
+		})
 		return syntheticSystemErrorResponse(req, err), nil
 	}
 
 	p.logDecision(req, category, amountPaise, decision, nil)
 
 	if !decision.Allowed {
+		p.logResolved(req.Context(), audit.Payload{
+			RequestID:   requestID,
+			PolicyID:    p.Policy.ID,
+			AgentID:     p.Policy.AgentID,
+			Category:    category,
+			AmountPaise: amountPaise,
+			Decision:    audit.DecisionDenied,
+			Reason:      decision.Reason,
+		})
 		return syntheticDenialResponse(req, decision.Reason), nil
 	}
 
-	return p.next().RoundTrip(req)
+	// Allowed: log intent before the request ever reaches Razorpay's
+	// network, then forward, then log the real outcome. LogIntent/LogOutcome
+	// never touch policy.Evaluate's transaction — it already closed above —
+	// and this whole block never wraps the outbound call in any transaction
+	// of its own, matching ADR-0002 Decision 6's invariant applied to the
+	// audit log as well as to policy evaluation.
+	//
+	// Fail closed, not open: if AuditStore is configured but LogIntent
+	// fails, the request must never be forwarded anyway. A prior version of
+	// this code logged the LogIntent error and forwarded regardless — a
+	// real fail-open bug, letting a request reach Razorpay with no
+	// corresponding audit intent ever recorded, inconsistent with every
+	// other fail-closed decision in this codebase. Same 503 shape as a
+	// policy-evaluation failure: this is a system-availability problem
+	// ("we don't know whether we can prove this happened"), not a policy
+	// decision, so it gets the same status code ADR-0002/ADR-0004 already
+	// established for that category of failure.
+	var intentID int64
+	if p.AuditStore != nil {
+		entry, intentErr := audit.LogIntent(req.Context(), p.AuditStore, audit.Payload{
+			RequestID:   requestID,
+			PolicyID:    p.Policy.ID,
+			AgentID:     p.Policy.AgentID,
+			Category:    category,
+			AmountPaise: amountPaise,
+			Decision:    audit.DecisionAllowed,
+			Reason:      decision.Reason,
+		})
+		if intentErr != nil {
+			p.logger().
+				Printf("mandate-gateway audit: LogIntent failed, denying request: %v", intentErr)
+			return syntheticSystemErrorResponse(
+				req,
+				fmt.Errorf("audit LogIntent failed: %w", intentErr),
+			), nil
+		}
+		intentID = entry.ID
+	}
+
+	resp, rtErr := p.next().RoundTrip(req)
+
+	if p.AuditStore != nil {
+		outcomeReason := "forwarded_ok"
+		switch {
+		case rtErr != nil:
+			outcomeReason = "transport_error: " + rtErr.Error()
+		case resp != nil:
+			outcomeReason = fmt.Sprintf("http_%d", resp.StatusCode)
+		}
+		if _, outcomeErr := audit.LogOutcome(
+			req.Context(),
+			p.AuditStore,
+			intentID,
+			outcomeReason,
+		); outcomeErr != nil {
+			p.logger().
+				Printf("mandate-gateway audit: LogOutcome failed for intent %d: %v", intentID, outcomeErr)
+		}
+	}
+
+	return resp, rtErr
+}
+
+// logResolved records a single, already-resolved audit entry for a request
+// that never left the process (a denial or a system error) — best-effort:
+// an audit write failure is logged but never fails the actual HTTP
+// decision already made. No-op if AuditStore is unset.
+func (p *PolicyRoundTripper) logResolved(ctx context.Context, payload audit.Payload) {
+	if p.AuditStore == nil {
+		return
+	}
+	if _, err := audit.LogResolved(ctx, p.AuditStore, payload); err != nil {
+		p.logger().Printf("mandate-gateway audit: LogResolved failed: %v", err)
+	}
 }
 
 // contentIdempotencyKey is the last-resort TryRecordDebit idempotency key,
