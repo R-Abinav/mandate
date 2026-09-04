@@ -130,6 +130,14 @@ func ExecuteMandateDebit(
 	// fields on this endpoint — confirmed live: omitting them returns
 	// "The contact field is required." (step: payment_initiation) before the
 	// request ever reaches payment logic.
+	//
+	// notes.mandate_request_id carries the real, caller-supplied idempotency
+	// key over the wire. Razorpay's API already supports arbitrary metadata
+	// via notes on orders/payments (confirmed in real payloads seen earlier
+	// in this project). Without this, nothing in the outbound HTTP body
+	// distinguishes a genuine retry (same request_id, regenerated order_id)
+	// from a new debit attempt — internal/gateway's PolicyRoundTripper reads
+	// this field directly rather than falling back to a body content hash.
 	data := map[string]interface{}{
 		"amount":      params.AmountPaise,
 		"currency":    "INR",
@@ -139,6 +147,9 @@ func ExecuteMandateDebit(
 		"recurring":   true,
 		"contact":     contact,
 		"email":       email,
+		"notes": map[string]interface{}{
+			"mandate_request_id": params.RequestID,
+		},
 	}
 
 	// 5. Execute the debit via CreateRecurringPayment (/v1/payments/create/

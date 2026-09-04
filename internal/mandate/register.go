@@ -31,6 +31,12 @@ func CreateRegistrationLink(
 	// swallow specific errors and silently return zero-value strings, which is the
 	// exact failure mode this project's error contract is designed to prevent.
 
+	// notes.mandate_request_id carries the caller's real idempotency key
+	// over the wire, the same mechanism execute.go uses for debit_execution
+	// (ADR-0004). Confirmed supported on this endpoint: a live
+	// CreateRegistrationLink response already returns "notes":[] (empty
+	// only because nothing has been sent yet, not because the field is
+	// unsupported) — see reg_link_max_amount.yaml.
 	data := map[string]interface{}{
 		"type":        "link",
 		"amount":      params.AmountPaise,
@@ -46,6 +52,9 @@ func CreateRegistrationLink(
 			"name":    params.CustomerName,
 			"email":   params.CustomerEmail,
 			"contact": params.CustomerContact,
+		},
+		"notes": map[string]interface{}{
+			"mandate_request_id": params.RequestID,
 		},
 	}
 

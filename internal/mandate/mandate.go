@@ -70,4 +70,14 @@ type RegistrationLinkParams struct {
 
 	// ExpireAt is when the mandate itself expires.
 	ExpireAt time.Time
+
+	// RequestID is the caller's idempotency key for this registration
+	// attempt, generated once and reused across retries — the same pattern
+	// as DebitParams.RequestID. CreateRegistrationLink sends it as
+	// notes.mandate_request_id so internal/gateway's PolicyRoundTripper can
+	// read a real key off the wire instead of falling back to a body
+	// content hash. Confirmed supported: Razorpay's Invoice entity on this
+	// endpoint already returns "notes":[] on every live response (empty
+	// only because nothing has been sent yet).
+	RequestID string
 }
