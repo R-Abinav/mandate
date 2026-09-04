@@ -26,6 +26,50 @@ var (
 
 	// ErrDebitExpired indicates the mandate token has expired.
 	ErrDebitExpired = errors.New("debit rejected by Razorpay: mandate token has expired")
+
+	// ErrDebitRequiresOTP indicates Razorpay returned a "next" action (an
+	// OTP or redirect URL) instead of completing the debit outright. A
+	// registered mandate's entire premise is a zero-interaction charge, so
+	// this must never be silently treated as success — it means Razorpay
+	// declined to honor the token-only recurring flow for this attempt.
+	ErrDebitRequiresOTP = errors.New(
+		"debit did not complete autonomously: razorpay returned a next-action (OTP) requirement",
+	)
+
+	// ErrDebitNotCaptured indicates Razorpay returned HTTP 200 with a full
+	// payment entity (status != "captured", captured == false) instead of
+	// either an explicit apiErr or the compact captured-payment envelope.
+	// Confirmed live: an amount exceeding a token's registered max_amount
+	// produces exactly this shape — no error_code, no next-action, just an
+	// uncaptured payment sitting in "created" status. Deliberately not
+	// aliased to ErrDebitMaxAmountExceeded: this observation confirms
+	// over-cap produces this response, not that every uncaptured payment is
+	// necessarily an over-cap case, so the two are kept distinct rather than
+	// conflating a single observed cause with the general symptom.
+	ErrDebitNotCaptured = errors.New(
+		"debit not captured: razorpay accepted the request but did not capture the payment",
+	)
+
+	// ErrDebitAuthorizedNotCaptured indicates a compact-envelope debit
+	// response (razorpay_payment_id/razorpay_order_id/razorpay_signature, no
+	// status field on the initial response) resolved via follow-up polling
+	// to status "authorized" but never transitioned to "captured" within the
+	// poll window. A more-progressed state than ErrDebitStuckUnauthorized —
+	// kept distinct so the audit trail can tell the two apart. Confirmed
+	// live: see the capture-verification investigation in
+	// docs/adr/0003_registration_link_auth.md.
+	ErrDebitAuthorizedNotCaptured = errors.New(
+		"debit authorized but not captured: razorpay did not complete capture within the poll window",
+	)
+
+	// ErrDebitStuckUnauthorized indicates a compact-envelope debit response
+	// never progressed past status "created" within the poll window — no
+	// surfaced error, no authorization, no capture. This is the exact state
+	// found live on an over-cap debit (the compact envelope alone does not
+	// mean success). See docs/adr/0003_registration_link_auth.md.
+	ErrDebitStuckUnauthorized = errors.New(
+		"debit stuck unauthorized: razorpay accepted the request but never authorized the payment",
+	)
 )
 
 // ErrNetworkFailure represents a transport-level network failure, cleanly separating

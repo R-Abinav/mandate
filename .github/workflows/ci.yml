@@ -1,5 +1,25 @@
 name: CI
 
+# NOTE (2026-09-04): the test-integration job below is EXPECTED to be red
+# right now, for three known, documented reasons — not a silent regression:
+#   1. TestMandateLifecycle/7_ExecuteDebit_InCap: cassette predates the
+#      compact-envelope capture-verification fix, so replay fails with
+#      "requested interaction not found." See the comment directly above
+#      that subtest in test/integration/mandate_lifecycle_test.go.
+#   2. TestMandateLifecycle/8_ExecuteDebit_MaxAmountExceeded: intentionally
+#      skipped. Both (1) and (2) need a live re-record against Razorpay's
+#      test-mode API, which is currently blocked by an exhausted daily
+#      pre-debit-notification quota on the only available token (confirmed
+#      by direct live attempt, not assumed). See the comment above that
+#      subtest for the full record.
+#   3. TestPolicyStore_Concurrency (internal/store): requires a live
+#      Postgres via DATABASE_URL_TEST, which this workflow does not
+#      currently provision (no Postgres service configured in this job).
+#      This is a separate, pre-existing gap, not something introduced with
+#      (1) or (2) — see docs/adr for the local-Postgres CI follow-up.
+# Do not "fix" this job by loosening assertions or scoping tests out; each
+# of the above needs its own real fix (a re-record once quota resets, and a
+# Postgres service wired into this job), not a workaround here.
 on:
   push:
     branches:
@@ -35,3 +55,24 @@ jobs:
         with:
           version: latest
           args: --timeout=5m
+
+  test-integration:
+    runs-on: ubuntu-latest
+    # Known red today — see the dated note at the top of this file. Left
+    # blocking (no continue-on-error) so the state stays visible in CI
+    # rather than silently muted.
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.x'
+          cache: true
+
+      - name: Install dependencies
+        run: go mod download
+
+      - name: Integration tests (tagged)
+        run: go test -v -race -tags=integration ./...
