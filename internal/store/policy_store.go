@@ -28,6 +28,14 @@ type PostgresPolicyStore struct {
 	db *sql.DB
 }
 
+// dbCallTimeout bounds every individual database call in this file. Defense
+// in depth: nothing upstream of these calls previously enforced a deadline
+// (callers have passed context.Background() with no timeout), so a slow or
+// unreachable database could hang a request indefinitely with no error at
+// all, distinguishable only by the test binary's own -timeout eventually
+// firing. This must fail fast and loud instead.
+const dbCallTimeout = 5 * time.Second
+
 // NewPostgresPolicyStore creates a new PostgresPolicyStore.
 func NewPostgresPolicyStore(db *sql.DB) *PostgresPolicyStore {
 	return &PostgresPolicyStore{db: db}
@@ -38,8 +46,11 @@ func (s *PostgresPolicyStore) GetPolicy(
 	ctx context.Context,
 	policyID string,
 ) (policy.Policy, error) {
+	callCtx, cancel := context.WithTimeout(ctx, dbCallTimeout)
+	defer cancel()
+
 	var p policy.Policy
-	err := s.db.QueryRowContext(ctx, `
+	err := s.db.QueryRowContext(callCtx, `
 		SELECT id, agent_id, per_debit_cap_paise, cumulative_cap_paise, window_seconds, allowed_categories, expires_at, max_call_count
 		FROM policies
 		WHERE id = $1
@@ -120,8 +131,17 @@ func (s *PostgresPolicyStore) tryRecordDebitOnce(
 	cumulativeCapPaise int64,
 	maxCallCount int,
 ) (policy.Decision, error) {
+	// Bound this entire attempt (lock + sum + insert + commit) to
+	// dbCallTimeout. Without this, a slow or unreachable database hangs the
+	// whole attempt indefinitely with no error surfaced at all — confirmed
+	// live: context.Background() with no deadline anywhere upstream let a
+	// slow remote database hang this exact call path past 45s with zero
+	// diagnostic signal until the test binary's own -timeout fired.
+	callCtx, cancel := context.WithTimeout(ctx, dbCallTimeout)
+	defer cancel()
+
 	// Begin transaction
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+	tx, err := s.db.BeginTx(callCtx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 	if err != nil {
 		return policy.Decision{}, fmt.Errorf("%w: begin tx: %v", policy.ErrStoreUnavailable, err)
 	}
@@ -129,7 +149,7 @@ func (s *PostgresPolicyStore) tryRecordDebitOnce(
 
 	// Try advisory lock on the specific policy_id
 	var locked bool
-	err = tx.QueryRowContext(ctx, "SELECT pg_try_advisory_xact_lock(hashtextextended($1, 0))", req.PolicyID).
+	err = tx.QueryRowContext(callCtx, "SELECT pg_try_advisory_xact_lock(hashtextextended($1, 0))", req.PolicyID).
 		Scan(&locked)
 	if err != nil {
 		return policy.Decision{}, fmt.Errorf(
@@ -147,7 +167,7 @@ func (s *PostgresPolicyStore) tryRecordDebitOnce(
 	// if this request is a retry of an already recorded debit.
 	var windowSpent int64
 	var windowCount int
-	err = tx.QueryRowContext(ctx, `
+	err = tx.QueryRowContext(callCtx, `
 		SELECT COALESCE(SUM(amount_paise), 0), COUNT(*)
 		FROM debit_ledger
 		WHERE policy_id = $1
@@ -185,7 +205,7 @@ func (s *PostgresPolicyStore) tryRecordDebitOnce(
 
 	// Insert on conflict DO NOTHING
 	var id int64
-	err = tx.QueryRowContext(ctx, `
+	err = tx.QueryRowContext(callCtx, `
 		INSERT INTO debit_ledger (policy_id, request_id, amount_paise, category)
 		VALUES ($1, $2, $3, $4)
 		ON CONFLICT (policy_id, request_id) DO NOTHING

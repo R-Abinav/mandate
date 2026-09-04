@@ -67,12 +67,18 @@ func TestMandateLifecycle(t *testing.T) {
 		}
 	}
 
-	// validTokenID/validTokenCustomerID: steps 7-8 use the real confirmed
-	// token proven live in the ADR-0003 debit investigation
-	// (token_TXriCwptx38v9J / cust_TXrhXepAQFpm3Q, expires 2026-09-30), not
-	// the freshly-created customerID above — that token belongs to a
-	// specific customer, and Token.Fetch is scoped by customer_id, so the two
-	// must be a real matching pair, not the locally-created placeholder.
+	// validTokenID/validTokenCustomerID: steps 7-8 use a real confirmed
+	// token, not the freshly-created customerID above — that token belongs
+	// to a specific customer, and Token.Fetch is scoped by customer_id, so
+	// the two must be a real matching pair, not the locally-created
+	// placeholder.
+	//
+	// token_TXriCwptx38v9J is the ONLY token with a proven, genuine success
+	// on record (two real captured debits, ADR-0003) and is used here for
+	// that reason alone. As of 2026-09-04 it is blocked by an exhausted
+	// daily pre-debit-notification quota, not by any defect — see step 8's
+	// comment below for the four other tokens tried and why none of them
+	// are usable as a substitute.
 	//
 	// Step 6 (debit against an *unconfirmed* token) still self-skips: nothing
 	// in this codebase currently produces or records a token sitting in a
@@ -149,29 +155,31 @@ func TestMandateLifecycle(t *testing.T) {
 			"logic is covered directly by the status-parsing unit tests in fetch_test.go.")
 	})
 
-	// (7) In-cap debit — uses the real confirmed token proven live in the
-	// ADR-0003 investigation. See also execute_debit_test.go's
+	// (7) In-cap debit — uses token_TXriCwptx38v9J, the only token with a
+	// proven genuine capture on record. As of 2026-09-04 this token is
+	// blocked by an exhausted daily pre-debit-notification quota (see the
+	// comment above validTokenID and step 8 below), so a live re-record will
+	// fail with that quota error until it resets — expected, not a defect.
+	// See also execute_debit_test.go's
 	// TestExecuteMandateDebit_SucceedsWithFetchedContactInfo for the
 	// dedicated, cassette-backed regression coverage of this same call.
 	//
-	// KNOWN FAILING as of 2026-09-04, not a silent regression: this step's
-	// cassette predates the compact-envelope hardening fix in execute.go
-	// (ExecuteMandateDebit now makes an additional client.Payment.Fetch call
-	// that the recorded cassette doesn't have), so replay fails with
-	// "requested interaction not found." Re-recording live today hits the
-	// same exhausted daily Razorpay pre-debit-notification quota documented
-	// on step 8 below (confirmed by direct live attempt, not assumed). Fix
-	// is a straightforward re-record once quota resets — same token
-	// (token_TXriCwptx38v9J), same call, nothing to redesign.
+	// Own dedicated cassette (not the shared TestMandateLifecycle one) so
+	// re-recording this step never risks corrupting or losing steps 1/2's
+	// interactions in the shared cassette — the exact problem hit the first
+	// time this was re-recorded.
 	t.Run("7_ExecuteDebit_InCap", func(t *testing.T) {
+		stepClient, stop := newTestClient(t, "mandate_lifecycle_step7_incap")
+		defer stop()
+
 		params := mandate.DebitParams{
 			TokenID:     validTokenID,
 			CustomerID:  validTokenCustomerID,
 			RequestID:   "req_incap_test",
 			Receipt:     "mandate-debit-req_incap_test",
-			AmountPaise: 50000,
+			AmountPaise: 10000, // ₹100, well under the ₹2,000 cap
 		}
-		paymentID, err := mandate.ExecuteMandateDebit(ctx, client, params)
+		paymentID, err := mandate.ExecuteMandateDebit(ctx, stepClient, params)
 		if err != nil {
 			t.Fatalf("expected debit success, got err: %v", err)
 		}
@@ -180,36 +188,31 @@ func TestMandateLifecycle(t *testing.T) {
 		}
 	})
 
-	// (8) Debit exceeding max_amount — still skipped, but not for the reason
-	// originally recorded. The earlier flaky-looking live behavior (4/5
-	// captured, 1/5 uncaptured for an identical over-cap request) has since
-	// been diagnosed as the compact-envelope bug — a genuinely
+	// (8) Debit exceeding max_amount — skipped. Quota-blocked on the working
+	// token as of 2026-09-04; four independently-registered tokens since
+	// then (two cards tested) all reproducibly fail authorization regardless
+	// of amount, cause under investigation with Razorpay support, ticket
+	// open. Don't assert anything against a token known to be broken.
+	//
+	// History, kept for the record: the earlier flaky-looking live behavior
+	// (4/5 captured, 1/5 uncaptured for an identical over-cap request,
+	// observed against token_TXriCwptx38v9J before quota exhaustion) was
+	// diagnosed as the compact-envelope bug — a genuinely
 	// uncaptured/unauthorized payment misreported as success by the
 	// response-parsing fallback, not real non-determinism in Razorpay's cap
 	// enforcement. That bug is fixed, and the retry/poll logic is already
 	// covered deterministically (fixture-based, no live dependency) by the
 	// TestVerifyCompactEnvelopeCapture_* tests in internal/mandate/execute_test.go.
-	//
-	// Un-skipping was attempted live on 2026-09-04: the only available
-	// confirmed token (token_TXriCwptx38v9J, cust_TXrhXepAQFpm3Q — confirmed
-	// via `grep -orh '"token_[A-Za-z0-9]*"' cassettes/*.yaml`, no second
-	// token exists anywhere in this repo's recorded cassettes) returned
-	// "Card mandate pre debit notification limit exceeded for today" —
-	// Razorpay's daily rate limit on debit attempts per mandate, confirmed
-	// exhausted by direct live attempt, not assumed. That interaction was
-	// deliberately NOT committed to a cassette; recording the quota-exceeded
-	// response as if it were the expected outcome would silently make this
-	// test assert the wrong thing forever. The cassette file go-vcr wrote
-	// during that attempt was deleted.
-	//
-	// Un-skip once either: today's quota resets and a fresh live attempt
-	// against this token succeeds in recording the real over-cap outcome, or
-	// a second token is registered so this step doesn't compete with step
-	// 7's in-cap debit for the same daily quota.
+	// This step's actual job — prove the full lifecycle test surfaces an
+	// over-cap debit as a distinguishable failure end-to-end, through the
+	// real live call path — remains unverified until a genuinely working
+	// token is available again. See ADR-0003 for the full investigation.
 	t.Run("8_ExecuteDebit_MaxAmountExceeded", func(t *testing.T) {
-		t.Skip("Blocked on today's exhausted pre-debit-notification quota on the only " +
-			"available token (confirmed by direct live attempt, 2026-09-04), not on the " +
-			"compact-envelope bug, which is fixed. See the comment above this subtest.")
+		t.Skip("Quota-blocked on the working token as of 2026-09-04; four " +
+			"independently-registered tokens since then (two cards tested) all " +
+			"reproducibly fail authorization regardless of amount, cause under " +
+			"investigation with Razorpay support, ticket open. Don't assert " +
+			"anything against a token known to be broken.")
 	})
 
 	// (9) Debit against an expired mandate — skipped; covered by structured error fallback below.
