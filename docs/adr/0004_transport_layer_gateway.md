@@ -131,6 +131,24 @@ real risk in the other direction, if a future Razorpay endpoint that *can*
 move money were mistaken for a safe passthrough by surface resemblance to
 this one. The test is about capability, not verb.
 
+**Confirmed as a repeatable pattern, not a one-off (added 2026-09-05,
+`docs/adr/0007_mcp_composition.md`).** The same gap recurred, in the same
+shape, the very next time this codebase composed a client through
+`PolicyRoundTripper` with a caller it hadn't been exercised against before:
+the official `razorpay-mcp-server`'s `fetch_tokens` tool calls
+`client.Customer.Create` (`POST /v1/customers`, a get-or-create customer
+lookup) before listing saved payment methods, and `Classify` had no case
+for it — denied outright as an unrecognized write, exactly like
+`order_creation` before this section existed. Applying the money-movement
+test above resolved it identically: a customer lookup can't move money by
+itself, so `customer_lookup` is a fifth passthrough category, not a gated
+write. Two real instances of the same discovery — both found live, both by
+composing `PolicyRoundTripper` with a call path that hadn't been run
+through it before — is enough to say plainly: **any new caller composed
+through this gateway should be expected to surface at least one
+uncategorized-but-harmless `POST` the first time it's actually run live**,
+not treated as a surprise each time.
+
 ### Fail-closed default
 
 The deny-by-default behavior on unrecognized writes is the load-bearing
@@ -152,9 +170,9 @@ On every call:
    other logic runs. `http.Request.Body` is a single-read stream; every
    downstream path (classify, evaluate, forward) sees the same intact body
    regardless of which branch is taken.
-2. `read_only` and `order_creation` both forward immediately, no policy
-   call — see "Order creation: a fourth passthrough category" for why
-   `order_creation` is its own category rather than an alias for
+2. `read_only`, `order_creation`, and `customer_lookup` all forward
+   immediately, no policy call — see "Order creation: a fourth passthrough
+   category" for why each is its own category rather than an alias for
    `read_only`.
 3. An unrecognized write returns a synthetic `403` — the network is never
    touched.

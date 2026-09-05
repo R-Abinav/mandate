@@ -67,11 +67,12 @@ func NewGatedClient(
 	client := razorpay.NewClient(cfg.RazorpayKeyID, cfg.RazorpayKeySecret)
 	client.HTTPClient = &http.Client{
 		Transport: &PolicyRoundTripper{
-			Resolver:   policyStore,
-			Store:      policyStore,
-			AuditStore: auditStore,
-			Next:       http.DefaultTransport,
-			Logger:     logger,
+			Resolver:    policyStore,
+			Store:       policyStore,
+			AuditStore:  auditStore,
+			Next:        http.DefaultTransport,
+			Logger:      logger,
+			BootAgentID: cfg.MandateAgentID,
 		},
 	}
 

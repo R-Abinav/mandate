@@ -254,6 +254,68 @@ func TestPolicyRoundTripper_OrderCreation_AlwaysForwards(t *testing.T) {
 	}
 }
 
+// TestPolicyRoundTripper_CustomerLookup_AlwaysForwards confirms POST
+// /v1/customers bypasses policy entirely, exactly like order_creation — the
+// mock upstream DOES receive this request. This is the exact call the
+// official razorpay-mcp-server's fetch_tokens tool makes (via
+// client.Customer.Create with fail_existing:"0") before listing saved
+// payment methods; a policy-gated client denying it outright as an
+// unrecognized write was a real, live-confirmed bug (2026-09-05, Step 4 of
+// the MCP composition work) that broke fetch_tokens identically to how the
+// order_creation gap once broke every debit.
+func TestPolicyRoundTripper_CustomerLookup_AlwaysForwards(t *testing.T) {
+	upstreamCalled := 0
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		upstreamCalled++
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer upstream.Close()
+
+	fakeStore := store.NewFakePolicyStore()
+	// Deliberately empty AllowedCategories — would deny any write category,
+	// proving customer_lookup truly never reaches policy.Evaluate at all.
+	pol := policy.Policy{
+		ID:                 "policy_test",
+		AgentID:            "agent_test",
+		PerDebitCapPaise:   1,
+		CumulativeCapPaise: 1,
+		WindowSeconds:      86400,
+		AllowedCategories:  []string{},
+		ExpiresAt:          time.Now().Add(24 * time.Hour),
+		MaxCallCount:       1,
+	}
+	fakeStore.Policies[pol.ID] = pol
+
+	rt := &PolicyRoundTripper{Resolver: fakeStore, Store: fakeStore, Next: http.DefaultTransport}
+	client := &http.Client{Transport: rt}
+
+	body := []byte(`{"contact":"9004739000","fail_existing":"0"}`)
+	req, err := http.NewRequest(
+		http.MethodPost,
+		upstream.URL+customerLookupPath,
+		bytes.NewReader(body),
+	)
+	if err != nil {
+		t.Fatalf("failed to build request: %v", err)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("unexpected transport error: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if upstreamCalled != 1 {
+		t.Fatalf(
+			"expected customer_lookup to reach upstream exactly once, got %d calls",
+			upstreamCalled,
+		)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 from upstream, got %d", resp.StatusCode)
+	}
+}
+
 // TestPolicyRoundTripper_UnrecognizedWrite_DeniedByDefault confirms an
 // unknown write path is denied without ever consulting the store.
 func TestPolicyRoundTripper_UnrecognizedWrite_DeniedByDefault(t *testing.T) {
@@ -526,6 +588,14 @@ func TestPolicyRoundTripper_SystemError_Returns503NotDenial(t *testing.T) {
 // Resolver is ever consulted — panicResolver below panics if called at all,
 // so this test fails loudly (not just with a wrong status code) if that
 // ordering ever regresses.
+//
+// This is also, explicitly, the no-regression proof for BootAgentID
+// (added alongside MANDATE_AGENT_ID): rt.BootAgentID is left at its zero
+// value here — unset, exactly as every direct internal/mandate or
+// cmd/mandate-cli caller runs today — so a missing wire agent_id must still
+// be rejected exactly as it always was. If BootAgentID's fallback logic
+// ever accidentally engaged when no boot value was actually configured,
+// this test would start passing panicResolver a real agent_id and panic.
 func TestPolicyRoundTripper_MissingAgentID_DeniedImmediately(t *testing.T) {
 	upstream := noUpstreamServer(t)
 	defer upstream.Close()
@@ -534,6 +604,7 @@ func TestPolicyRoundTripper_MissingAgentID_DeniedImmediately(t *testing.T) {
 		Resolver: panicResolver{},
 		Store:    &erroringStore{err: policy.ErrStoreUnavailable},
 		Next:     http.DefaultTransport,
+		// BootAgentID deliberately left unset (zero value "").
 	}
 	client := &http.Client{Transport: rt}
 
@@ -597,6 +668,144 @@ func TestPolicyRoundTripper_UnknownAgentID_Returns503(t *testing.T) {
 
 	if resp.StatusCode != http.StatusServiceUnavailable {
 		t.Fatalf("expected 503 for an agent_id with no configured policy, got %d", resp.StatusCode)
+	}
+}
+
+// TestPolicyRoundTripper_BootAgentID_FallsBackWhenWireAgentIDAbsent proves
+// the second branch: no notes.mandate_agent_id on the wire, but
+// rt.BootAgentID is configured — the request resolves against the boot
+// agent's real policy rather than being rejected. The amount is
+// deliberately within that policy's cap, so a 200 (not just "not a 403")
+// proves resolution actually reached and used the boot agent's policy.
+func TestPolicyRoundTripper_BootAgentID_FallsBackWhenWireAgentIDAbsent(t *testing.T) {
+	upstreamCalled := 0
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		upstreamCalled++
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer upstream.Close()
+
+	fakeStore := store.NewFakePolicyStore()
+	bootPolicy := policy.Policy{
+		ID:                 "policy_boot",
+		AgentID:            "agent_boot",
+		PerDebitCapPaise:   50000,
+		CumulativeCapPaise: 1000000,
+		WindowSeconds:      86400,
+		AllowedCategories:  []string{CategoryDebitExecution},
+		ExpiresAt:          time.Now().Add(24 * time.Hour),
+		MaxCallCount:       1000,
+	}
+	fakeStore.Policies[bootPolicy.ID] = bootPolicy
+
+	rt := &PolicyRoundTripper{
+		Resolver:    fakeStore,
+		Store:       fakeStore,
+		Next:        http.DefaultTransport,
+		BootAgentID: "agent_boot",
+	}
+	client := &http.Client{Transport: rt}
+
+	// No notes field at all — no mandate_agent_id on the wire.
+	body := []byte(
+		`{"amount":10000,"currency":"INR","order_id":"order_x","token":"token_x","recurring":true}`,
+	)
+	req, err := http.NewRequest(
+		http.MethodPost,
+		upstream.URL+debitExecutionPath,
+		bytes.NewReader(body),
+	)
+	if err != nil {
+		t.Fatalf("failed to build request: %v", err)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("unexpected transport error: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 (allowed against the boot agent's policy), got %d", resp.StatusCode)
+	}
+	if upstreamCalled != 1 {
+		t.Fatalf("expected exactly 1 upstream call, got %d", upstreamCalled)
+	}
+}
+
+// TestPolicyRoundTripper_BootAgentID_WireAgentIDTakesPrecedence proves the
+// first branch stays unchanged: a wire-supplied notes.mandate_agent_id must
+// win even when a BootAgentID is also configured — never overridden, never
+// second-guessed. wire_agent's policy has a per-debit cap the test amount
+// exceeds, while boot_agent's policy (same amount) would allow it — so a
+// 403 here can only mean the wire value was actually used, not the boot
+// fallback silently substituted in in front of it.
+func TestPolicyRoundTripper_BootAgentID_WireAgentIDTakesPrecedence(t *testing.T) {
+	upstreamCalled := 0
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		upstreamCalled++
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer upstream.Close()
+
+	fakeStore := store.NewFakePolicyStore()
+	wirePolicy := policy.Policy{
+		ID:                 "policy_wire",
+		AgentID:            "agent_wire",
+		PerDebitCapPaise:   1000, // lower than the test's 10000-paise amount
+		CumulativeCapPaise: 1000000,
+		WindowSeconds:      86400,
+		AllowedCategories:  []string{CategoryDebitExecution},
+		ExpiresAt:          time.Now().Add(24 * time.Hour),
+		MaxCallCount:       1000,
+	}
+	bootPolicy := policy.Policy{
+		ID:                 "policy_boot",
+		AgentID:            "agent_boot",
+		PerDebitCapPaise:   50000, // would allow the same amount
+		CumulativeCapPaise: 1000000,
+		WindowSeconds:      86400,
+		AllowedCategories:  []string{CategoryDebitExecution},
+		ExpiresAt:          time.Now().Add(24 * time.Hour),
+		MaxCallCount:       1000,
+	}
+	fakeStore.Policies[wirePolicy.ID] = wirePolicy
+	fakeStore.Policies[bootPolicy.ID] = bootPolicy
+
+	rt := &PolicyRoundTripper{
+		Resolver:    fakeStore,
+		Store:       fakeStore,
+		Next:        http.DefaultTransport,
+		BootAgentID: "agent_boot",
+	}
+	client := &http.Client{Transport: rt}
+
+	body := []byte(
+		`{"amount":10000,"currency":"INR","order_id":"order_x","token":"token_x","recurring":true,"notes":{"mandate_agent_id":"agent_wire"}}`,
+	)
+	req, err := http.NewRequest(
+		http.MethodPost,
+		upstream.URL+debitExecutionPath,
+		bytes.NewReader(body),
+	)
+	if err != nil {
+		t.Fatalf("failed to build request: %v", err)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("unexpected transport error: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf(
+			"expected 403 (denied against the WIRE agent's low cap, proving BootAgentID did not override it), got %d",
+			resp.StatusCode,
+		)
+	}
+	if upstreamCalled != 0 {
+		t.Fatalf("expected zero upstream calls for a denial, got %d", upstreamCalled)
 	}
 }
 

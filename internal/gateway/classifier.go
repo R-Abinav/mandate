@@ -38,6 +38,21 @@ const (
 	// risk — capture only ever happens at the subsequent, fully-gated
 	// debit_execution call.
 	CategoryOrderCreation = "order_creation"
+
+	// CategoryCustomerLookup identifies a POST /v1/customers call — a
+	// get-or-create customer lookup, the first step of the official
+	// razorpay-mcp-server's fetch_tokens tool (internal/mcpserver) before it
+	// lists saved payment methods. Passes through unconditionally, exactly
+	// like CategoryOrderCreation and CategoryReadOnly, for the same reason:
+	// creating or fetching a customer record moves no money. Kept as its
+	// own category rather than folded into CategoryReadOnly for the same
+	// reason CategoryOrderCreation is — a POST that stages a resource and a
+	// GET that reads one are different things being let through for
+	// different reasons, and that should stay visible in the logs. See
+	// docs/adr/0004_transport_layer_gateway.md's "Order creation: a fourth
+	// passthrough category" section — this is the second live instance of
+	// the exact same pattern it describes, not a one-off.
+	CategoryCustomerLookup = "customer_lookup"
 )
 
 // registrationLinkPath is the exact path CreateRegistrationLink posts to.
@@ -62,6 +77,16 @@ const debitExecutionPath = "/v1/payments/create/recurring"
 // real debit attempt before it ever reached the call policy.Evaluate
 // actually needs to gate.
 const orderCreationPath = "/v1/orders"
+
+// customerLookupPath is the exact path a get-or-create customer lookup
+// posts to. Confirmed against source: the real, go.mod-pinned v1.2.1
+// razorpay-mcp-server module's FetchSavedPaymentMethods handler
+// (pkg/razorpay/tokens.go) calls client.Customer.Create with
+// fail_existing:"0" before listing tokens — discovered live (2026-09-05,
+// same session as orderCreationPath) that a policy-gated client denied
+// this call outright as an unrecognized write, breaking that tool
+// identically to how the order_creation gap once broke every debit.
+const customerLookupPath = "/v1/customers"
 
 // Classify inspects an outbound Razorpay request and determines its policy
 // category, the amount in paise it represents, and — when the request
@@ -98,18 +123,19 @@ const orderCreationPath = "/v1/orders"
 // (policy.ErrMissingAgentID) rather than falling back to anything — there
 // is no default policy to attribute an unattributed request to.
 //
-// A POST to orderCreationPath is CategoryOrderCreation and also returns
-// ok=true unconditionally, alongside CategoryReadOnly — see
-// CategoryOrderCreation's doc comment for why this is a distinctly-labeled
-// passthrough rather than either a gated write or a silent alias for
-// CategoryReadOnly. No amount, requestID, or agentID is extracted for it:
-// createDebitOrder's request body carries none of those fields (no notes
-// map at all), and none would be meaningful for a call that never
-// evaluates against a cap.
+// A POST to orderCreationPath or customerLookupPath is, respectively,
+// CategoryOrderCreation or CategoryCustomerLookup, and also returns
+// ok=true unconditionally, alongside CategoryReadOnly — see each
+// category's doc comment for why it's a distinctly-labeled passthrough
+// rather than either a gated write or a silent alias for CategoryReadOnly.
+// No amount, requestID, or agentID is extracted for either: neither
+// createDebitOrder's nor a customer get-or-create's request body carries
+// those fields (no notes map at all), and none would be meaningful for a
+// call that never evaluates against a cap.
 //
-// Anything else write-shaped — any non-GET request that isn't
-// orderCreationPath or one of the two gated write paths, or a gated path
-// whose body doesn't parse the way it should — returns ok=false. The
+// Anything else write-shaped — any non-GET request that isn't one of the
+// three passthrough paths or one of the two gated write paths, or a gated
+// path whose body doesn't parse the way it should — returns ok=false. The
 // caller must deny by default: an unrecognized write is not assumed safe.
 func Classify(
 	req *http.Request,
@@ -125,6 +151,10 @@ func Classify(
 
 	if req.URL.Path == orderCreationPath {
 		return CategoryOrderCreation, 0, "", "", true
+	}
+
+	if req.URL.Path == customerLookupPath {
+		return CategoryCustomerLookup, 0, "", "", true
 	}
 
 	switch req.URL.Path {

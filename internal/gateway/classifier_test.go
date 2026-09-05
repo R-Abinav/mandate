@@ -207,6 +207,36 @@ func TestClassify_OrderCreation(t *testing.T) {
 	}
 }
 
+// TestClassify_CustomerLookup confirms POST /v1/customers classifies as its
+// own CategoryCustomerLookup, distinct from both CategoryReadOnly and an
+// unrecognized write — the second live instance of the order_creation
+// pattern (docs/adr/0004_transport_layer_gateway.md), found via
+// fetch_tokens (internal/mcpserver) being denied outright before this fix.
+func TestClassify_CustomerLookup(t *testing.T) {
+	req := newRequest(t, http.MethodPost, customerLookupPath)
+	body := []byte(`{"contact":"9004739000","fail_existing":"0"}`)
+
+	category, amountPaise, requestID, agentID, ok := Classify(req, body)
+	if !ok {
+		t.Fatal("expected ok=true for a POST /v1/customers request")
+	}
+	if category != CategoryCustomerLookup {
+		t.Fatalf("expected category=%q, got %q", CategoryCustomerLookup, category)
+	}
+	if amountPaise != 0 {
+		t.Fatalf(
+			"expected amountPaise=0 for customer_lookup (not policy-evaluated), got %d",
+			amountPaise,
+		)
+	}
+	if requestID != "" {
+		t.Fatalf("expected empty requestID for customer_lookup, got %q", requestID)
+	}
+	if agentID != "" {
+		t.Fatalf("expected empty agentID for customer_lookup, got %q", agentID)
+	}
+}
+
 func TestClassify_UnrecognizedWrite_UnknownPath(t *testing.T) {
 	req := newRequest(t, http.MethodPost, "/v1/payments/create/upi")
 	body := []byte(`{"amount":100}`)

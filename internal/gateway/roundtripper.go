@@ -58,6 +58,33 @@ type PolicyRoundTripper struct {
 	// never a package-level global, the same convention AuditStore already
 	// establishes. Defaults to slog.Default() if nil.
 	Logger *slog.Logger
+
+	// BootAgentID is a fallback agent identity, configured once at process
+	// boot (MANDATE_AGENT_ID), used only when a recognized write's
+	// notes.mandate_agent_id is empty. It exists for callers with no way to
+	// set per-request wire metadata — a custom MCP tool wrapping
+	// internal/mandate.ExecuteMandateDebit directly is the motivating case,
+	// since the MCP tool-call schema has no notes-equivalent field an
+	// agent can set (see docs/adr/0007_mcp_composition.md). It never
+	// overrides a wire-supplied agent_id: resolveWritePolicy only consults
+	// it when the wire value is empty, and a request that arrives with a
+	// real notes.mandate_agent_id is resolved against that value exactly as
+	// before this field existed. Empty by default — no fallback, and a
+	// missing wire agent_id is rejected exactly as it always was
+	// (policy.ErrMissingAgentID).
+	BootAgentID string
+}
+
+// loggedPassthroughCategories maps each passthrough category that isn't
+// CategoryReadOnly to its own one-line log message. Pulled out as data
+// rather than a chain of near-identical if-statements in RoundTrip so
+// adding the next such category (see docs/adr/0004_transport_layer_gateway.md's
+// closing note that this is now an expected, repeatable pattern) is a
+// one-line addition here, not another branch pushing RoundTrip's
+// cyclomatic complexity back over its lint threshold.
+var loggedPassthroughCategories = map[string]string{
+	CategoryOrderCreation:  "order_creation: passthrough, no monetary risk",
+	CategoryCustomerLookup: "customer_lookup: passthrough, no monetary risk",
 }
 
 func (p *PolicyRoundTripper) next() http.RoundTripper {
@@ -98,17 +125,20 @@ func (p *PolicyRoundTripper) RoundTrip(req *http.Request) (*http.Response, error
 		return p.next().RoundTrip(req)
 	}
 
-	// order_creation forwards unconditionally, exactly like read_only, but
-	// gets its own one-line log entry rather than sharing read_only's
-	// silence — a GET and an inert money-staging POST are different things
-	// being let through for different reasons, and that distinction should
-	// be visible in the logs, not collapsed. Not a policy decision, so no
+	// order_creation and customer_lookup both forward unconditionally,
+	// exactly like read_only, but each gets its own one-line log entry
+	// rather than sharing read_only's silence — a GET and an inert
+	// resource-staging POST are different things being let through for
+	// different reasons, and that distinction should be visible in the
+	// logs, not collapsed. Neither is a policy decision, so neither gets an
 	// audit-chain entry: logDecision/logResolved exist for outcomes
 	// policy.Evaluate actually produced, and this call never reaches
 	// Evaluate at all. See docs/adr/0004_transport_layer_gateway.md's
-	// "Order creation: a fourth passthrough category" section.
-	if category == CategoryOrderCreation {
-		p.logger().Info("order_creation: passthrough, no monetary risk",
+	// "Order creation: a fourth passthrough category" section for both —
+	// customer_lookup is the second confirmed live instance of the same
+	// pattern, not a separate design.
+	if logMsg, isLoggedPassthrough := loggedPassthroughCategories[category]; isLoggedPassthrough {
+		p.logger().Info(logMsg,
 			"method", req.Method,
 			"path", req.URL.Path,
 		)
@@ -293,10 +323,20 @@ func (p *PolicyRoundTripper) resolveWritePolicy(
 		return policy.Policy{}, syntheticDenialResponse(req, "unrecognized_write")
 	}
 
-	// Every recognized write must carry a resolvable agent_id before any
-	// policy lookup is attempted — never defaulted, never inferred. This is
-	// a genuine policy decision ("we know, and it's no": a request with no
-	// agent attribution can never be evaluated), not a system failure, so
+	// A wire-supplied agent_id always wins. BootAgentID is consulted only
+	// when the wire carried none at all — never to override or second-guess
+	// a value that was actually present, which would reintroduce exactly
+	// the kind of silent inference RequireAgentID exists to forbid.
+	if agentID == "" && p.BootAgentID != "" {
+		agentID = p.BootAgentID
+	}
+
+	// Every recognized write must carry a resolvable agent_id — wire-supplied
+	// or, absent that, the boot-configured fallback above — before any
+	// policy lookup is attempted; never defaulted or inferred beyond that
+	// one explicit, boot-time-configured exception. This is a genuine
+	// policy decision ("we know, and it's no": a request with no agent
+	// attribution at all can never be evaluated), not a system failure, so
 	// it gets the same 403/DecisionDenied shape as unrecognized_write, not
 	// a 503.
 	if err := policy.RequireAgentID(agentID); err != nil {
