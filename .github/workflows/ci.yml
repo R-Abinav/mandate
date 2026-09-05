@@ -2,18 +2,22 @@ name: CI
 
 # NOTE (2026-09-04): the test-integration job below is EXPECTED to be red
 # right now, for two known, documented reasons — not a silent regression:
-#   1. TestMandateLifecycle/7_ExecuteDebit_InCap: cassette predates the
-#      compact-envelope capture-verification fix, so replay fails with
-#      "requested interaction not found." See the comment directly above
-#      that subtest in test/integration/mandate_lifecycle_test.go.
+#   1. TestMandateLifecycle/7_ExecuteDebit_InCap: asserts a successful
+#      debit, but the account's only available token
+#      (token_TXriCwptx38v9J) is genuinely stuck-unauthorized — confirmed
+#      against Razorpay's own documentation, not a code defect. See
+#      docs/adr/0003_registration_link_auth.md's closing finding for the
+#      full record. Resolution is pending Razorpay support, not a fix in
+#      this codebase.
 #   2. TestMandateLifecycle/8_ExecuteDebit_MaxAmountExceeded: intentionally
-#      skipped. Both (1) and (2) need a live re-record against Razorpay's
-#      test-mode API, which is currently blocked by an exhausted daily
-#      pre-debit-notification quota on the only available token (confirmed
-#      by direct live attempt, not assumed). See the comment above that
-#      subtest for the full record.
+#      skipped — needs a live re-record against Razorpay's test-mode API,
+#      currently blocked by an exhausted daily pre-debit-notification
+#      quota on the only available token (confirmed by direct live
+#      attempt, not assumed). See the comment above that subtest for the
+#      full record.
 # Do not "fix" this job by loosening assertions or scoping tests out; (1)
-# and (2) need a real fix — a live re-record once quota resets — not a
+# needs Razorpay support to resolve the account-level authorization gap,
+# and (2) needs a live re-record once quota resets — neither is a
 # workaround here. The previous third reason (no Postgres provisioned in
 # this job, so DATABASE_URL_TEST-dependent tests like
 # TestPolicyStore_Concurrency had nothing to run against) is fixed below:

@@ -62,17 +62,20 @@ func NewPostgresStore(db *sql.DB) *PostgresStore {
 // that both use pg_try_advisory_xact_lock as the underlying primitive.
 const auditChainLockKey = "audit_chain"
 
-// appendRetryDelays is the exact bounded backoff schedule
-// store.PostgresPolicyStore.TryRecordDebit already uses for its own
-// advisory lock (ADR-0002 Decision 2) — reused verbatim here, not
-// reinvented, so the two locks in this codebase that use
-// pg_try_advisory_xact_lock behave identically under contention.
+// appendRetryDelays starts from the exact bounded backoff schedule
+// store.PostgresPolicyStore.TryRecordDebit uses for its own advisory lock
+// (ADR-0002 Decision 2), extended one step further (320ms). The audit
+// chain's lock is a single global key contended by every writer
+// regardless of policy or agent, unlike the per-policy lock, so it sees
+// more contention at the same request volume and needed a slightly higher
+// ceiling to converge reliably under CI's real Postgres service.
 var appendRetryDelays = []time.Duration{
 	10 * time.Millisecond,
 	20 * time.Millisecond,
 	40 * time.Millisecond,
 	80 * time.Millisecond,
 	160 * time.Millisecond,
+	320 * time.Millisecond,
 }
 
 // Append reads the current chain tail and inserts the new entry, retrying
