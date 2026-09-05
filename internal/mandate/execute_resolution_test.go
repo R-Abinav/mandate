@@ -15,13 +15,12 @@ import (
 )
 
 // gatedTestClient composes a real gateway.PolicyRoundTripper (backed by
-// fake policy/audit stores, per this project's established fast-test
-// pattern) in front of routingMockRoundTripper. This is not a simulation
-// of the audit trail's shape in isolation — it is the same two-package
-// composition (internal/gateway wrapping internal/mandate's calls) that
-// produced exactly today's live finding: intent+outcome written by
-// PolicyRoundTripper, resolution written by ExecuteMandateDebit itself, on
-// the same chain.
+// fake policy/audit stores) in front of routingMockRoundTripper. This is
+// not a simulation of the audit trail's shape in isolation — it is the
+// same two-package composition (internal/gateway wrapping
+// internal/mandate's calls) that produces the real chain: intent+outcome
+// written by PolicyRoundTripper, resolution written by ExecuteMandateDebit
+// itself, on the same chain.
 func gatedTestClient(
 	t *testing.T,
 	next http.RoundTripper,
@@ -99,13 +98,12 @@ func assertResolutionEntry(t *testing.T, entries []audit.Entry, requestID, wantR
 	}
 }
 
-// TestExecuteMandateDebit_ResolutionEntry_StuckUnauthorized reproduces
-// exactly the scenario found live on 2026-09-05: a compact-envelope 200
-// response, then three Payment.Fetch polls that never progress past
-// status:"created". Before the resolution-entry fix, the audit trail ended
-// at exactly two entries — intent (allowed) and outcome (http_200) —
-// silently implying success. This asserts a third, correcting entry now
-// exists.
+// TestExecuteMandateDebit_ResolutionEntry_StuckUnauthorized confirms that a
+// compact-envelope 200 response followed by three Payment.Fetch polls that
+// never progress past status:"created" produces a third, correcting audit
+// entry (resolution) beyond the intent and outcome entries — the audit
+// trail must never end at just those two, which would silently imply
+// success.
 func TestExecuteMandateDebit_ResolutionEntry_StuckUnauthorized(t *testing.T) {
 	mock := &routingMockRoundTripper{
 		customerStatusCode: 200,

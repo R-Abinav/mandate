@@ -42,9 +42,6 @@ func ParseTokenStatus(tok map[string]interface{}) (string, error) {
 		)
 	}
 
-	// AUTHORITATIVE FIELD EXPLANATION:
-	// We must read recurring_details.status if present to determine if the
-	// mandate is actually 'confirmed'.
 	if recDetails, ok := tok["recurring_details"].(map[string]interface{}); ok {
 		if recStatus, ok := recDetails["status"].(string); ok && recStatus != "" {
 			return recStatus, nil

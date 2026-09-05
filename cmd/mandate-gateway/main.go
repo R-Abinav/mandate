@@ -1,4 +1,4 @@
-// Command mandate-gateway is the transport-layer enforcement process. It
+// Mandate-gateway is the transport-layer enforcement process. It
 // constructs the razorpay-go SDK client with a PolicyRoundTripper installed
 // as its HTTPClient.Transport, so every outbound write call — whether
 // issued by the official razorpay-mcp-server toolset or mandate's own
@@ -40,8 +40,8 @@ func main() {
 func run(cfg config.Env, logger *slog.Logger) error {
 
 	// Multi-agent scoping (docs/adr/0006_multi_agent_scoping.md) replaced
-	// the single-policy-at-boot model this process used through Phase 5.
-	// There is no longer one Policy value loaded here: PolicyRoundTripper
+	// the single-policy-at-boot model this process previously used. There
+	// is no longer one Policy value loaded here: PolicyRoundTripper
 	// now resolves a policy per request, keyed by the agent_id carried in
 	// notes.mandate_agent_id on the wire (or, absent that, BootAgentID —
 	// see docs/adr/0007_mcp_composition.md's "boot-time agent identity"

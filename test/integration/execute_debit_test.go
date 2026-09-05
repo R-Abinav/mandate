@@ -11,10 +11,11 @@ import (
 )
 
 // TestExecuteMandateDebit_SucceedsWithFetchedContactInfo is the regression
-// test for the endpoint/account-mode saga documented in ADR-0003: it locks in
-// that ExecuteMandateDebit, via CreateRecurringPayment with contact/email
-// fetched from Customer.Fetch, produces a real captured debit — not just that
-// it worked once live on 2026-09-04, but that it stays working in CI.
+// test for the endpoint/account-mode investigation documented in ADR-0003:
+// it locks in that ExecuteMandateDebit, via CreateRecurringPayment with
+// contact/email fetched from Customer.Fetch, produces a real captured
+// debit — not just that it worked once live, but that it stays working in
+// CI.
 //
 // Uses the same confirmed token proven live in that investigation
 // (token_TXriCwptx38v9J / cust_TXrhXepAQFpm3Q, expires 2026-09-30). The

@@ -54,7 +54,8 @@ func createDebitOrder(client *razorpay.Client, amount int64, receipt string) (st
 	return orderID, nil
 }
 
-// parseStructuredError classifies the Razorpay error into our sentinel errors.
+// parseStructuredError classifies a Razorpay error into this package's
+// sentinel errors.
 func parseStructuredError(err error) error {
 	if err == nil {
 		return nil
@@ -62,7 +63,9 @@ func parseStructuredError(err error) error {
 
 	errStr := strings.ToLower(err.Error())
 
-	// Fall back to substring matching since we are using the standard SDK error string
+	// The razorpay-go SDK collapses structured API errors into a plain
+	// error string, so classification falls back to substring matching
+	// rather than inspecting a typed error code.
 	if strings.Contains(errStr, "token_max_amount_exceeded") ||
 		strings.Contains(errStr, "maximum amount authorized") ||
 		strings.Contains(errStr, "exceeds the maximum amount") {
@@ -159,9 +162,8 @@ func ExecuteMandateDebit(
 	// request ever reaches payment logic.
 	//
 	// notes.mandate_request_id carries the real, caller-supplied idempotency
-	// key over the wire. Razorpay's API already supports arbitrary metadata
-	// via notes on orders/payments (confirmed in real payloads seen earlier
-	// in this project). Without this, nothing in the outbound HTTP body
+	// key over the wire. Razorpay's API supports arbitrary metadata via
+	// notes on orders/payments. Without this, nothing in the outbound HTTP body
 	// distinguishes a genuine retry (same request_id, regenerated order_id)
 	// from a new debit attempt — internal/gateway's PolicyRoundTripper reads
 	// this field directly rather than falling back to a body content hash.
@@ -181,14 +183,11 @@ func ExecuteMandateDebit(
 	}
 
 	// 5. Execute the debit via CreateRecurringPayment (/v1/payments/create/
-	// recurring). This is the correct, working endpoint for this account —
-	// confirmed live. See ADR-0003 for the full history: two earlier
-	// theories (a PCI-DSS certification gate, and a currency-based routing
-	// rule from the official MCP server's branch logic) were investigated
-	// and ruled out; the actual cause was that Subscription mode and
-	// Charge-at-will mode are mutually exclusive account settings, and this
-	// endpoint cannot execute a token-based charge while the account is in
-	// Subscription mode regardless of payload completeness.
+	// recurring) — the correct endpoint for this account. Subscription mode
+	// and Charge-at-will mode are mutually exclusive account settings, and
+	// this endpoint cannot execute a token-based charge while the account
+	// is in Subscription mode, regardless of payload completeness. See
+	// ADR-0003 for the full investigation.
 	parsed, apiErr := client.Payment.CreateRecurringPayment(data, nil)
 	if apiErr != nil {
 		return "", parseStructuredError(apiErr)

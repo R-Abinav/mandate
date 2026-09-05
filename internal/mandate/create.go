@@ -1,5 +1,3 @@
-// Package mandate defines the core data structures representing the
-// Razorpay UPI Autopay mandate lifecycle (creation, authorization, and debit).
 package mandate
 
 import (
@@ -31,8 +29,8 @@ func CreateMandateOrder(
 		},
 	}
 
-	// client.Order.Create does not natively accept a context in the razorpay-go SDK.
-	// We pass the data map and nil for extra headers.
+	// client.Order.Create does not accept a context in the razorpay-go SDK;
+	// only the data map and extra headers (nil, here) are passed.
 	body, err := client.Order.Create(data, nil)
 	if err != nil {
 		return "", fmt.Errorf("razorpay API error: %w", err)

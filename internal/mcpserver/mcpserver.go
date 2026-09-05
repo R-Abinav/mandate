@@ -43,8 +43,8 @@ import (
 // mcpgo.NewMcpServer call with the same default ServerOptions
 // (WithLogging, WithResourceCapabilities, WithToolCapabilities,
 // WithHooks(SetupHooks(obs))) — and adds each of the three wanted tools
-// individually via AddTools, the same mechanism confirmed (Step 3
-// investigation) to be how NewRzpMcpServer registers tools internally.
+// individually via AddTools, the same mechanism NewRzpMcpServer itself uses
+// to register tools internally.
 // InitiatePayment is never constructed, referenced, or registered by any
 // code path here.
 //

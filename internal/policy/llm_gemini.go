@@ -17,10 +17,9 @@ type GeminiClient struct {
 	Model  string
 }
 
-// defaultGeminiModel is used when model is empty. gemini-2.5-flash was the
-// original choice here but was confirmed live (2026-09-05) to have been
-// deprecated — Google's own API error named gemini-3.6-flash as the direct
-// replacement, cited verbatim rather than guessed at.
+// defaultGeminiModel is used when model is empty. gemini-2.5-flash is
+// deprecated; the Gemini API's own error response for it names
+// gemini-3.6-flash as the replacement, used here rather than guessed at.
 const defaultGeminiModel = "gemini-3.6-flash"
 
 // NewGeminiClient constructs a client. model overrides the default

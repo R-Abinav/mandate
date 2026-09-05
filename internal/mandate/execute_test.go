@@ -132,8 +132,7 @@ func TestExecuteMandateDebit_FailsClosedWhenCustomerFetchErrors(t *testing.T) {
 // if Customer.Fetch succeeds (200) but the response body is missing the
 // contact or email field, ExecuteMandateDebit still fails closed with a named
 // error rather than sending an incomplete payload that Razorpay would reject
-// with its own generic, unhelpful block — the exact confusing failure mode
-// this project spent multiple rounds chasing down for the debit endpoint.
+// with its own generic, unhelpful error instead.
 func TestExecuteMandateDebit_FailsClosedWhenCustomerContactMissing(t *testing.T) {
 	paymentCalled := false
 	client := razorpay.NewClient("mock_key", "mock_secret")
@@ -170,16 +169,14 @@ func TestExecuteMandateDebit_FailsClosedWhenCustomerContactMissing(t *testing.T)
 	}
 }
 
-// TestExecuteMandateDebit_FailsClosedWhenPaymentNotCaptured locks in the fix
-// for a real live bug: an amount exceeding a token's registered cap does not
-// come back as an apiErr on this endpoint. Razorpay returns HTTP 200 with the
-// full payment entity (status:"created", captured:false, no
-// razorpay_payment_id key) instead of the compact captured-payment envelope.
-// The fixture body below is the exact shape observed live (amount=300000
-// against a 200000-paise cap token, 2026-09-04). Before the fix,
-// ExecuteMandateDebit fell back to parsed["id"] and reported this as a
-// successful debit — a real, uncaptured, money-never-moved payment reported
-// as success. This must never regress silently.
+// TestExecuteMandateDebit_FailsClosedWhenPaymentNotCaptured confirms that an
+// amount exceeding a token's registered cap, which does not come back as an
+// apiErr on this endpoint, is still never reported as a successful debit.
+// Razorpay instead returns HTTP 200 with the full payment entity
+// (status:"created", captured:false, no razorpay_payment_id key) rather
+// than the compact captured-payment envelope; ExecuteMandateDebit must
+// reject this shape rather than falling back to parsed["id"] and reporting
+// a real, uncaptured, money-never-moved payment as success.
 func TestExecuteMandateDebit_FailsClosedWhenPaymentNotCaptured(t *testing.T) {
 	const uncapturedPaymentBody = `{
 		"id": "pay_mock_uncaptured",
@@ -267,12 +264,12 @@ func TestExecuteMandateDebit_CompactEnvelope_CapturedImmediately_NoOverPoll(t *t
 // The tests below call verifyCompactEnvelopeCapture directly rather than
 // going through ExecuteMandateDebit end-to-end. Two reasons: it lets each
 // test inject a near-zero pollInterval instead of the real 1.5s production
-// value (these tests used to cost 9s total in real time.Sleep calls), and it
-// lets the interval actually be pinned — an elapsed-time assertion below
-// would be meaningless if the tests couldn't control what interval was used
-// in the first place. token/order/customer plumbing is irrelevant to this
-// function and is already covered by the full-entity and
-// fails-closed tests above and the one retained end-to-end test.
+// value, so the suite doesn't pay for real time.Sleep calls, and it lets
+// the interval actually be pinned — an elapsed-time assertion below would
+// be meaningless if the tests couldn't control what interval was used in
+// the first place. token/order/customer plumbing is irrelevant to this
+// function and is already covered by the full-entity and fails-closed
+// tests above and the one retained end-to-end test.
 const testPollInterval = 5 * time.Millisecond
 
 func newFetchOnlyClient(
@@ -291,9 +288,10 @@ func newFetchOnlyClient(
 	return client
 }
 
-// TestVerifyCompactEnvelopeCapture_StuckCreated_AllRetries reproduces the
-// exact live finding: a compact-envelope response whose payment never
-// progresses past status "created" across the full poll window. Also pins
+// TestVerifyCompactEnvelopeCapture_StuckCreated_AllRetries confirms a
+// compact-envelope response whose payment never progresses past status
+// "created" across the full poll window resolves to
+// ErrDebitStuckUnauthorized. Also pins
 // that pollInterval is genuinely used: with 3 attempts and 2 waits at
 // testPollInterval, elapsed time must be at least 2x the interval and stay
 // well under what the real 1.5s production constant would take — if the

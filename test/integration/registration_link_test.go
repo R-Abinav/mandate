@@ -33,10 +33,10 @@ const vcrRecordModeEnvVar = "VCR_RECORD_MODE"
 // through to a real live API call whenever a cassette file happens to be
 // missing.
 //
-// That silent fallback is exactly what caused an unintended live debit
-// attempt on 2026-09-05: a cassette deliberately deleted for reflecting a
-// broken, non-representative token result was regenerated — with a fresh,
-// real, non-representative result all over again — by nothing more than an
+// That silent fallback is exactly what once caused an unintended live
+// debit attempt: a cassette deliberately deleted for reflecting a broken,
+// non-representative token result was regenerated — with a fresh, real,
+// non-representative result all over again — by nothing more than an
 // ordinary `go test -tags=integration ./...` run. ModeReplayOnly makes that
 // class of accident structurally impossible: a missing cassette is now a
 // test failure, never a network call.
@@ -102,7 +102,7 @@ func mapKeys(m map[string]interface{}) []string {
 // ceiling (₹2,000) is applied, not silently overridden by Razorpay's ₹15,000
 // (1500000 paise) network default.
 //
-// Response shape confirmed against a live Razorpay test-mode call (2026-09-04):
+// Response shape confirmed against a live Razorpay test-mode call:
 //   - The registration link response is a flat invoice entity. It does NOT
 //     contain a subscription_registration key — that key exists only in the
 //     request payload. max_amount does not appear in the link response itself.

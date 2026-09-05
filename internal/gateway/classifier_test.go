@@ -209,9 +209,9 @@ func TestClassify_OrderCreation(t *testing.T) {
 
 // TestClassify_CustomerLookup confirms POST /v1/customers classifies as its
 // own CategoryCustomerLookup, distinct from both CategoryReadOnly and an
-// unrecognized write — the second live instance of the order_creation
-// pattern (docs/adr/0004_transport_layer_gateway.md), found via
-// fetch_tokens (internal/mcpserver) being denied outright before this fix.
+// unrecognized write — the passthrough internal/mcpserver's fetch_tokens
+// tool needs, since its handler issues this exact call before listing
+// saved payment methods (see docs/adr/0004_transport_layer_gateway.md).
 func TestClassify_CustomerLookup(t *testing.T) {
 	req := newRequest(t, http.MethodPost, customerLookupPath)
 	body := []byte(`{"contact":"9004739000","fail_existing":"0"}`)

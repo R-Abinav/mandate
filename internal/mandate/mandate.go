@@ -1,5 +1,6 @@
-// Package mandate defines the core data structures representing the
-// Razorpay UPI Autopay mandate lifecycle (creation, authorization, and debit).
+// Package mandate implements the Razorpay recurring-mandate lifecycle:
+// registration-link-based card authorization, token confirmation polling,
+// and recurring debit execution against a confirmed token.
 package mandate
 
 import "time"
@@ -37,7 +38,7 @@ type DebitParams struct {
 	TokenID     string
 	CustomerID  string // Required to fetch token status prior to debit execution
 	OrderID     string // Razorpay requires an order to execute the payment against the token
-	RequestID   string // Used for idempotency mapping (e.g., X-Razorpay-Idempotency-Key header)
+	RequestID   string // Idempotency key, sent as notes.mandate_request_id
 	Receipt     string // Deterministically populated from RequestID (e.g., "mandate-debit-" + RequestID) for reconciliation
 	AmountPaise int64
 

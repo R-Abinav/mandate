@@ -25,10 +25,9 @@ import (
 //   - ctx cancellation: propagated as a wrapped context error, distinct from
 //     a timeout so callers can tell "we gave up" from "deadline exceeded."
 //
-// ARCHITECTURAL NOTE: Webhooks are Razorpay's primary mechanism for token
-// state updates. Polling is the documented fallback for environments where
-// standing up a webhook receiver is impractical. This is the Phase 2 approach;
-// Phase 3 should add an async webhook receiver and replace this polling loop.
+// Webhooks are Razorpay's primary mechanism for token state updates;
+// polling here is the documented fallback for environments where standing
+// up a webhook receiver is impractical.
 func WaitForNewConfirmedToken(
 	ctx context.Context,
 	client *rzpsdk.Client,
@@ -69,13 +68,15 @@ func WaitForNewConfirmedToken(
 					return id, nil
 				}
 
-				// If explicitly rejected, we should abort so we don't timeout blindly.
+				// An explicit rejection aborts immediately with the real reason,
+				// rather than continuing to poll toward a generic timeout.
 				if status == "rejected" {
 					return "", fmt.Errorf("%w: token status became %s", ErrMandateRejected, status)
 				}
 
-				// For 'failed', CoFT tokens often return failed initially before recurring_details
-				// is populated or updated, so we ignore it and keep polling rather than aborting.
+				// CoFT tokens often return 'failed' initially, before
+				// recurring_details is populated or updated, so 'failed' is
+				// ignored and polling continues rather than aborting.
 			}
 		}
 		// fetchErr is intentionally swallowed per poll — transient Razorpay
@@ -89,7 +90,6 @@ func WaitForNewConfirmedToken(
 			}
 			return "", fmt.Errorf("polling interrupted: %w", ctxErr)
 		case <-ticker.C:
-			// Tick elapsed; loop around and query again.
 		}
 	}
 }

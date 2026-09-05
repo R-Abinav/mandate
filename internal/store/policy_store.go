@@ -1,3 +1,7 @@
+// Package store implements the Postgres-backed persistence layer for
+// policies, the debit ledger, and policy proposals — satisfying
+// internal/policy's Store and PolicyResolver interfaces — plus in-memory
+// fake test doubles for both.
 package store
 
 import (
@@ -13,6 +17,8 @@ import (
 
 // PolicyStore defines the data access layer for policies and the debit ledger.
 type PolicyStore interface {
+	// GetPolicy fetches a policy by its ID, returning policy.ErrPolicyNotFound
+	// if no such policy exists.
 	GetPolicy(ctx context.Context, policyID string) (policy.Policy, error)
 
 	// GetPolicyByAgentID resolves the one policy row belonging to agentID —
@@ -22,6 +28,10 @@ type PolicyStore interface {
 	// structurally.
 	GetPolicyByAgentID(ctx context.Context, agentID string) (policy.Policy, error)
 
+	// TryRecordDebit atomically checks req against the given caps and, if
+	// allowed, records it in the debit ledger — the single point where a
+	// policy decision and its ledger effect happen together, never as two
+	// separate steps a crash could split.
 	TryRecordDebit(
 		ctx context.Context,
 		req policy.DebitRequest,
@@ -170,7 +180,9 @@ func (s *PostgresPolicyStore) SavePolicy(ctx context.Context, p policy.Policy) e
 
 var errLockFailed = errors.New("advisory lock not acquired")
 
-// TryRecordDebit attempts to record a debit while strictly enforcing policy caps.
+// TryRecordDebit attempts to record a debit while strictly enforcing policy
+// caps, retrying with bounded backoff on advisory-lock contention before
+// returning policy.ErrLockContention.
 func (s *PostgresPolicyStore) TryRecordDebit(
 	ctx context.Context,
 	req policy.DebitRequest,
@@ -233,14 +245,13 @@ func (s *PostgresPolicyStore) tryRecordDebitOnce(
 	callCtx, cancel := context.WithTimeout(ctx, dbCallTimeout)
 	defer cancel()
 
-	// Begin transaction
 	tx, err := s.db.BeginTx(callCtx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 	if err != nil {
 		return policy.Decision{}, fmt.Errorf("%w: begin tx: %w", policy.ErrStoreUnavailable, err)
 	}
 	defer func() { _ = tx.Rollback() }() // Safe to call even if already committed
 
-	// Try advisory lock on the specific policy_id
+	// Try the advisory lock on the specific policy_id
 	var locked bool
 	err = tx.QueryRowContext(callCtx, "SELECT pg_try_advisory_xact_lock(hashtextextended($1, 0))", req.PolicyID).
 		Scan(&locked)
@@ -255,9 +266,11 @@ func (s *PostgresPolicyStore) tryRecordDebitOnce(
 		return policy.Decision{}, errLockFailed
 	}
 
-	// Compute SUM and COUNT using Postgres server-side NOW()
-	// We deliberately exclude the current request_id to prevent double-counting
-	// if this request is a retry of an already recorded debit.
+	// SUM/COUNT use Postgres server-side NOW(), not a client clock, so the
+	// window boundary is consistent regardless of clock skew between this
+	// process and the database. The current request_id is deliberately
+	// excluded to prevent double-counting if this request is a retry of an
+	// already recorded debit.
 	var windowSpent int64
 	var windowCount int
 	err = tx.QueryRowContext(callCtx, `
@@ -296,7 +309,6 @@ func (s *PostgresPolicyStore) tryRecordDebitOnce(
 		}, nil
 	}
 
-	// Insert on conflict DO NOTHING
 	var id int64
 	err = tx.QueryRowContext(callCtx, `
 		INSERT INTO debit_ledger (policy_id, request_id, amount_paise, category)
@@ -324,7 +336,6 @@ func (s *PostgresPolicyStore) tryRecordDebitOnce(
 		)
 	}
 
-	// Commit transaction
 	if err := tx.Commit(); err != nil {
 		return policy.Decision{}, fmt.Errorf("%w: commit tx: %w", policy.ErrStoreUnavailable, err)
 	}

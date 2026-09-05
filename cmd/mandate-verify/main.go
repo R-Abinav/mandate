@@ -1,6 +1,6 @@
-// Command mandate-verify is a standalone CLI that connects to the audit
-// store and walks the full hash chain, reporting whether it is intact or
-// naming the specific entry where it broke.
+// Mandate-verify is a standalone CLI that connects to the audit store and
+// walks the full hash chain, reporting whether it is intact or naming the
+// specific entry where it broke.
 package main
 
 import (

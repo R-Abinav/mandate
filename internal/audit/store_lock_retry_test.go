@@ -15,12 +15,10 @@ import (
 	_ "github.com/lib/pq"
 )
 
-// TestPostgresStore_Append_RetriesLockContention proves the fix directly:
-// a caller with no retry logic of its own — a bare, single Append call —
-// must not see ErrChainLocked just because another goroutine is
-// concurrently appending at the same instant. Before this fix, Append's
-// single non-blocking pg_try_advisory_xact_lock attempt surfaced
-// contention immediately; this test forces real, fully-synchronized
+// TestPostgresStore_Append_RetriesLockContention confirms that a caller
+// with no retry logic of its own — a bare, single Append call — never sees
+// ErrChainLocked just because another goroutine is concurrently appending
+// at the same instant: this test forces real, fully-synchronized
 // contention on the one global chain lock and asserts every call succeeds.
 //
 // 20 concurrent, dead-synchronized appends is deliberately well beyond the
@@ -31,8 +29,8 @@ import (
 // (ADR-0002 Decision 2), which is itself documented as insufficient alone
 // at extreme scale (internal/store/policy_store_concurrency_test.go's own
 // 500-goroutine test needs an additional client-level retry loop on top of
-// the store's internal one). The fix here is the same kind of graceful
-// handling, not a claim that contention is eliminated at any scale.
+// the store's internal one). This is the same kind of graceful handling,
+// not a claim that contention is eliminated at any scale.
 
 func TestPostgresStore_Append_RetriesLockContention(t *testing.T) {
 	cfg := config.Load()

@@ -78,16 +78,15 @@ var appendRetryDelays = []time.Duration{
 // Append reads the current chain tail and inserts the new entry, retrying
 // with bounded backoff on lock contention exactly the way TryRecordDebit
 // already does for the per-policy lock — see docs/adr/0005_audit_trail.md's
-// updated Consequences entry for why a single global chain lock is
-// inherently more contended than a per-policy one (hash-chain ordering
-// requires serializing every writer against one key), and why graceful
-// retry, not eliminating the contention, is the fix. Before this, a single
-// failed non-blocking acquire attempt surfaced immediately as
-// ErrChainLocked, which RoundTrip's fail-closed handling turned into a 503
-// for what may otherwise have been an allowed request — confirmed live:
-// at just 2 concurrent agents (test/integration/multi_agent_load_test.go's
-// demo-scale scenario), roughly 39% of attempts hit at least one such 503
-// before this fix.
+// Consequences entry for why a single global chain lock is inherently more
+// contended than a per-policy one (hash-chain ordering requires
+// serializing every writer against one key), and why graceful retry, not
+// eliminating the contention, is the fix. Without this retry, a single
+// failed non-blocking acquire attempt surfaces immediately as
+// ErrChainLocked, which RoundTrip's fail-closed handling turns into a 503
+// for what may otherwise be an allowed request — measured at roughly 39%
+// of attempts hitting at least one such 503 at just 2 concurrent agents
+// (test/integration/multi_agent_load_test.go's demo-scale scenario).
 func (s *PostgresStore) Append(
 	ctx context.Context,
 	build func(prevHash string) (Entry, error),
@@ -177,6 +176,7 @@ func (s *PostgresStore) appendOnce(
 	return entry, nil
 }
 
+// All implements Store, returning every entry in insertion order.
 func (s *PostgresStore) All(ctx context.Context) ([]Entry, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, entry_type, intent_id, prev_hash, payload, hash, created_at
@@ -202,6 +202,7 @@ func (s *PostgresStore) All(ctx context.Context) ([]Entry, error) {
 	return entries, nil
 }
 
+// Get implements Store, returning ErrEntryNotFound if id does not exist.
 func (s *PostgresStore) Get(ctx context.Context, id int64) (Entry, error) {
 	row := s.db.QueryRowContext(ctx, `
 		SELECT id, entry_type, intent_id, prev_hash, payload, hash, created_at
@@ -215,6 +216,8 @@ func (s *PostgresStore) Get(ctx context.Context, id int64) (Entry, error) {
 	return e, err
 }
 
+// UnresolvedIntents implements Store, returning every intent entry with no
+// matching outcome entry.
 func (s *PostgresStore) UnresolvedIntents(ctx context.Context) ([]Entry, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, entry_type, intent_id, prev_hash, payload, hash, created_at

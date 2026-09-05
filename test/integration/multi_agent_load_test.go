@@ -17,14 +17,15 @@ import (
 	"github.com/R-Abinav/mandate/internal/store"
 )
 
-// TestMultiAgent_LoadWithRealThroughput is Step 5's real-numbers load test:
-// 6 agents, each with its own cumulative cap, each firing a batch of
+// TestMultiAgent_LoadWithRealThroughput is the real-numbers load test: 6
+// agents, each with its own cumulative cap, each firing a batch of
 // concurrent debit attempts deliberately larger than its own cap (a mix of
 // in-cap and over-cap attempts) simultaneously against the real
 // gateway+policy+audit stack — the same Go-native concurrent-goroutine
 // pattern already proven at internal/store/policy_store_concurrency_test.go's
 // 500-goroutine scale, extended across multiple independently-capped agents
-// instead of one policy, deliberately not introducing k6/vegeta tonight.
+// instead of one policy, deliberately not requiring a separate load-testing
+// tool (k6, vegeta) for this.
 //
 // This only runs meaningfully once TestMultiAgent_IsolatedCapsAndAudit has
 // already confirmed isolation is correct at a scale small enough to reason
@@ -35,9 +36,9 @@ func TestMultiAgent_LoadWithRealThroughput(t *testing.T) {
 	runMultiAgentLoad(t, 6)
 }
 
-// TestMultiAgent_LoadWithRealThroughput_TwoAgents matches the actual Phase 8
-// demo scenario (two agents on stage, not six) rather than the higher
-// synthetic scale above. Run separately, with its own real numbers reported,
+// TestMultiAgent_LoadWithRealThroughput_TwoAgents matches the actual demo
+// scenario (two agents on stage, not six) rather than the higher synthetic
+// scale above. Run separately, with its own real numbers reported,
 // because "does this happen at demo scale" is a different question than
 // "does this happen at all" — a design can be correct at scale and still
 // worth knowing is contention-free at the scale that will actually be shown

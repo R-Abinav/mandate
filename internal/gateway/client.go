@@ -16,10 +16,11 @@ import (
 // *razorpay.Client: opens the database, constructs the Postgres-backed
 // policy and audit stores, and installs a PolicyRoundTripper as the
 // client's HTTPClient.Transport. This is the exact construction
-// cmd/mandate-gateway performs at boot, extracted here as the single
-// source of truth so nothing else that needs the same wiring (a rehearsal
-// driver, a future serving surface) duplicates it by hand and risks it
-// drifting out of sync with what actually ships.
+// cmd/mandate-gateway performs at boot before handing the resulting
+// client to internal/mcpserver — extracted here as the single source of
+// truth so any caller needing the same wiring shares one construction
+// path instead of duplicating it by hand and risking it drifting out of
+// sync.
 //
 // The caller owns the returned *sql.DB and must close it — NewGatedClient
 // never closes a DB it successfully opened and returned.

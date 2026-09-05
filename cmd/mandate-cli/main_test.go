@@ -142,12 +142,11 @@ func TestConfirmCommand_AlreadyConsumedProposal_NeverWritesTwice(t *testing.T) {
 }
 
 // TestConfirmCommand_ErrorsAreUnwrappable confirms all three of
-// confirmCommand's proposal-lookup-failure branches now wrap the exact
+// confirmCommand's proposal-lookup-failure branches wrap the exact
 // sentinel they detected via errors.Is, rather than discarding it into a
-// fresh, unwrapped fmt.Errorf. Before this fix, a caller of confirmCommand
-// itself could not tell "not found" apart from "expired" apart from
-// "already consumed" without parsing the message text — even though the
-// function's own switch statement clearly knew the distinction internally.
+// fresh, unwrapped fmt.Errorf — so a caller of confirmCommand can tell
+// "not found" apart from "expired" apart from "already consumed"
+// programmatically, not just by parsing the message text.
 func TestConfirmCommand_ErrorsAreUnwrappable(t *testing.T) {
 	policies := store.NewFakePolicyStore()
 

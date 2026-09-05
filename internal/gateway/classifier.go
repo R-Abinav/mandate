@@ -70,22 +70,19 @@ const debitExecutionPath = "/v1/payments/create/recurring"
 // orderCreationPath is the exact path createDebitOrder posts to, confirmed
 // against source: internal/mandate/execute.go calls client.Order.Create
 // before every recurring-payment call, to stage the order the debit
-// references. Discovered live (2026-09-05) that a policy-gated client
-// denied this call outright as an unrecognized write — no test anywhere in
-// this codebase had exercised ExecuteMandateDebit through a
-// PolicyRoundTripper end-to-end before that rehearsal — breaking every
-// real debit attempt before it ever reached the call policy.Evaluate
-// actually needs to gate.
+// references. Without a passthrough for this path, a policy-gated client
+// denies it as an unrecognized write, breaking every debit attempt before
+// it ever reaches the call policy.Evaluate is meant to gate.
 const orderCreationPath = "/v1/orders"
 
 // customerLookupPath is the exact path a get-or-create customer lookup
 // posts to. Confirmed against source: the real, go.mod-pinned v1.2.1
 // razorpay-mcp-server module's FetchSavedPaymentMethods handler
 // (pkg/razorpay/tokens.go) calls client.Customer.Create with
-// fail_existing:"0" before listing tokens — discovered live (2026-09-05,
-// same session as orderCreationPath) that a policy-gated client denied
-// this call outright as an unrecognized write, breaking that tool
-// identically to how the order_creation gap once broke every debit.
+// fail_existing:"0" before listing tokens. Without a passthrough for this
+// path, a policy-gated client denies it as an unrecognized write, breaking
+// that tool the same way an unclassified order-creation call breaks every
+// debit.
 const customerLookupPath = "/v1/customers"
 
 // Classify inspects an outbound Razorpay request and determines its policy

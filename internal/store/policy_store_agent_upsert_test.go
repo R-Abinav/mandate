@@ -17,14 +17,14 @@ import (
 )
 
 // TestPolicyStore_SavePolicy_ReplacesExistingAgentPolicy is the real-Postgres
-// proof behind cmd/mandate-cli's fix: confirming a second policy for an
-// agent that already has one must UPDATE the existing row (upserting on the
-// agent_id UNIQUE constraint added by migrations/
-// 0005_require_policy_agent_id), not fail against it. Before this fix,
-// SavePolicy upserted ON CONFLICT (id) — a second policy under a
-// DIFFERENT id for the same agent hit the separate UNIQUE(agent_id)
-// constraint on INSERT and errored, since ON CONFLICT (id) only catches a
-// conflict on id, never on agent_id.
+// proof that confirming a second policy for an agent that already has one
+// UPDATEs the existing row (upserting on the agent_id UNIQUE constraint
+// added by migrations/0005_require_policy_agent_id) rather than failing
+// against it. SavePolicy must upsert ON CONFLICT (agent_id), not
+// ON CONFLICT (id): a second policy under a DIFFERENT id for the same
+// agent would otherwise hit the separate UNIQUE(agent_id) constraint on
+// INSERT and error, since ON CONFLICT (id) only catches a conflict on id,
+// never on agent_id.
 //
 // This also proves migrations/0006_debit_ledger_fk_update_cascade's ON
 // UPDATE CASCADE: a debit already recorded against the FIRST policy's id

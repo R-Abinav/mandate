@@ -1,4 +1,4 @@
-// Command mandate-cli is the natural-language policy setup CLI: a two-step
+// Mandate-cli is the natural-language policy setup CLI: a two-step
 // propose/confirm flow. propose parses free text into structured policy
 // numbers and stages them; confirm is the only command, anywhere in this
 // codebase, that writes to the real policies table.

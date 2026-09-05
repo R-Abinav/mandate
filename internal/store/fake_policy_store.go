@@ -99,7 +99,7 @@ func (f *FakePolicyStore) TryRecordDebit(
 
 	reqKey := req.PolicyID + ":" + req.RequestID
 
-	// Idempotency check: if we've seen this request, it's a replay of an allowed debit.
+	// Idempotency check: a request already seen is a replay of an allowed debit.
 	if f.SeenRequests[reqKey] {
 		return policy.Decision{
 			Allowed:          true,

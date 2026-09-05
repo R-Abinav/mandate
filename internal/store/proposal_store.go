@@ -84,6 +84,7 @@ func NewPostgresProposalStore(db *sql.DB) *PostgresProposalStore {
 	return &PostgresProposalStore{db: db}
 }
 
+// SaveProposal implements ProposalStore.
 func (s *PostgresProposalStore) SaveProposal(ctx context.Context, p StoredProposal) error {
 	callCtx, cancel := context.WithTimeout(ctx, dbCallTimeout)
 	defer cancel()
@@ -103,6 +104,8 @@ func (s *PostgresProposalStore) SaveProposal(ctx context.Context, p StoredPropos
 	return nil
 }
 
+// GetProposal implements ProposalStore, per its documented
+// found/expired/consumed error contract.
 func (s *PostgresProposalStore) GetProposal(
 	ctx context.Context,
 	proposalID string,
@@ -145,6 +148,7 @@ func (s *PostgresProposalStore) GetProposal(
 	return p, nil
 }
 
+// MarkConsumed implements ProposalStore.
 func (s *PostgresProposalStore) MarkConsumed(ctx context.Context, proposalID string) error {
 	callCtx, cancel := context.WithTimeout(ctx, dbCallTimeout)
 	defer cancel()

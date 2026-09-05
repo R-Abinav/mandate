@@ -93,8 +93,9 @@ func TestPolicyStore_Concurrency(t *testing.T) {
 			}
 
 			// Under extreme 500-way concurrency, the built-in 5-attempt store backoff
-			// might still exhaust its time waiting for the lock. We simulate a robust
-			// client/gateway that retries 503s until it gets a deterministic policy answer.
+			// might still exhaust its time waiting for the lock, so this client-level
+			// loop retries until it gets a deterministic policy answer, simulating a
+			// gateway that retries 503s rather than surfacing one to its own caller.
 			var dec policy.Decision
 			var opErr error
 			for retry := 0; retry < 50; retry++ {
@@ -118,7 +119,6 @@ func TestPolicyStore_Concurrency(t *testing.T) {
 		}(i)
 	}
 
-	// Release the hounds
 	close(startSignal)
 	wg.Wait()
 

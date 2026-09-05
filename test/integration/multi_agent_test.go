@@ -51,8 +51,8 @@ func openIntegrationTestDB(t *testing.T) *sql.DB {
 }
 
 // seedTestPolicy inserts a policy row directly — bypassing SavePolicy /
-// cmd/mandate-cli's propose-confirm flow, which is Phase 5's own concern
-// and orthogonal to what this file tests — and registers cleanup to remove
+// cmd/mandate-cli's propose-confirm flow, which is orthogonal to what this
+// file tests — and registers cleanup to remove
 // it and its ledger rows when the test ends. audit_log is deliberately
 // never cleaned up here: it is an append-only hash chain by design (ADR-0005)
 // and deleting rows from it, even test-generated ones, would be exactly the
@@ -146,19 +146,19 @@ func assertNoCrossAttribution(t *testing.T, db *sql.DB, ownerPolicyID, ownerAgen
 	}
 }
 
-// TestMultiAgent_IsolatedCapsAndAudit is Phase 6's isolation proof: two
-// policies, two independent agent_ids, independent cumulative caps. Both
-// agents fire concurrent debit attempts — deliberately more than either cap
-// allows — against the real gateway+policy+audit stack (real Postgres,
-// real PolicyRoundTripper, a mock HTTP upstream standing in for Razorpay's
+// TestMultiAgent_IsolatedCapsAndAudit is the isolation proof: two policies,
+// two independent agent_ids, independent cumulative caps. Both agents fire
+// concurrent debit attempts — deliberately more than either cap allows —
+// against the real gateway+policy+audit stack (real Postgres, real
+// PolicyRoundTripper, a mock HTTP upstream standing in for Razorpay's
 // network). Agent A's over-cap denials must have zero effect on Agent B's
 // remaining budget, and neither agent's audit trail may carry a single
 // entry attributable to the other.
 //
-// This must pass before Step 5's larger load test is trusted: the load
-// test's throughput numbers are only meaningful proof of isolation at scale
-// once isolation itself is confirmed correct here, at a scale small enough
-// to reason about by hand.
+// This must pass before TestMultiAgent_LoadWithRealThroughput is trusted:
+// the load test's throughput numbers are only meaningful proof of
+// isolation at scale once isolation itself is confirmed correct here, at a
+// scale small enough to reason about by hand.
 func TestMultiAgent_IsolatedCapsAndAudit(t *testing.T) {
 	db := openIntegrationTestDB(t)
 	defer db.Close()

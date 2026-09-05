@@ -21,6 +21,7 @@ func NewFakeProposalStore() *FakeProposalStore {
 	return &FakeProposalStore{Proposals: make(map[string]StoredProposal)}
 }
 
+// SaveProposal implements ProposalStore in memory.
 func (f *FakeProposalStore) SaveProposal(_ context.Context, p StoredProposal) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -28,6 +29,8 @@ func (f *FakeProposalStore) SaveProposal(_ context.Context, p StoredProposal) er
 	return nil
 }
 
+// GetProposal implements ProposalStore, per its documented
+// found/expired/consumed error contract.
 func (f *FakeProposalStore) GetProposal(
 	_ context.Context,
 	proposalID string,
@@ -48,6 +51,7 @@ func (f *FakeProposalStore) GetProposal(
 	return p, nil
 }
 
+// MarkConsumed implements ProposalStore.
 func (f *FakeProposalStore) MarkConsumed(_ context.Context, proposalID string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()

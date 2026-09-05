@@ -22,6 +22,7 @@ func NewFakeStore() *FakeStore {
 	return &FakeStore{nextID: 1}
 }
 
+// Append implements Store in memory, guarded by a mutex.
 func (f *FakeStore) Append(
 	_ context.Context,
 	build func(prevHash string) (Entry, error),
@@ -45,6 +46,7 @@ func (f *FakeStore) Append(
 	return entry, nil
 }
 
+// All implements Store, returning a copy of every entry in insertion order.
 func (f *FakeStore) All(_ context.Context) ([]Entry, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -54,6 +56,7 @@ func (f *FakeStore) All(_ context.Context) ([]Entry, error) {
 	return out, nil
 }
 
+// Get implements Store, returning ErrEntryNotFound if id does not exist.
 func (f *FakeStore) Get(_ context.Context, id int64) (Entry, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -66,6 +69,8 @@ func (f *FakeStore) Get(_ context.Context, id int64) (Entry, error) {
 	return Entry{}, ErrEntryNotFound
 }
 
+// UnresolvedIntents implements Store, returning every intent entry with no
+// matching outcome entry.
 func (f *FakeStore) UnresolvedIntents(_ context.Context) ([]Entry, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

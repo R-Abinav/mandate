@@ -7,8 +7,9 @@ import (
 	"time"
 )
 
-// Store defines the data access dependency required by Evaluate to record debits.
-// We define this interface here rather than importing the "store" package to prevent a cyclic dependency.
+// Store defines the data access dependency required by Evaluate to record
+// debits. Defined here rather than imported from "store" to avoid a cyclic
+// dependency: internal/store already imports internal/policy.
 type Store interface {
 	TryRecordDebit(
 		ctx context.Context,
@@ -19,12 +20,10 @@ type Store interface {
 	) (Decision, error)
 }
 
-// Evaluate applies the mandate policy to an incoming debit request.
-//
-// Rationale for check ordering:
-// We explicitly execute the cheapest, in-memory checks first. This guarantees
-// that a request destined to be denied will never pay the performance penalty
-// of a database round-trip or an advisory lock acquisition.
+// Evaluate applies the mandate policy to an incoming debit request. Checks
+// run cheapest-first, in memory, before any database round-trip: a request
+// destined to be denied never pays the cost of a store call or an advisory
+// lock acquisition.
 func Evaluate(ctx context.Context, req DebitRequest, pol Policy, s Store) (Decision, error) {
 	// Reject non-positive amounts to prevent agents from exploiting negative math to artificially increase their remaining budget.
 	if req.AmountPaise <= 0 {

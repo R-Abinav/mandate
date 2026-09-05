@@ -46,9 +46,8 @@ const (
 
 	// EntryTypeResolution is written once an already-allowed request
 	// (already carrying an intent/outcome pair) reaches a true final state
-	// that RoundTrip itself cannot observe — added 2026-09-05 after a live
-	// rehearsal found the gap firsthand, not a state anticipated in
-	// advance. LogOutcome's outcomeReason (e.g. "http_200") reflects only
+	// that RoundTrip itself cannot observe. LogOutcome's outcomeReason
+	// (e.g. "http_200") reflects only
 	// the immediate HTTP response to a debit_execution call; for a
 	// compact-envelope response, whether the payment actually captured is
 	// determined only by separate Payment.Fetch polling — polling that is,

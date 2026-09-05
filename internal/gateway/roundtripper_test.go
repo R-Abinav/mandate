@@ -196,10 +196,10 @@ func TestPolicyRoundTripper_ReadOnly_AlwaysForwards(t *testing.T) {
 // upstream DOES receive this request (unlike
 // TestPolicyRoundTripper_UnrecognizedWrite_DeniedByDefault below, where it
 // must not). This is the exact call internal/mandate's createDebitOrder
-// makes before every recurring-payment debit; a policy-gated client
-// denying it outright as an unrecognized write was a real, live-confirmed
-// bug (2026-09-05) that broke every debit attempt before it ever reached
-// the call policy.Evaluate is meant to gate.
+// makes before every recurring-payment debit; without this passthrough, a
+// policy-gated client denies it outright as an unrecognized write, breaking
+// every debit attempt before it ever reaches the call policy.Evaluate is
+// meant to gate.
 func TestPolicyRoundTripper_OrderCreation_AlwaysForwards(t *testing.T) {
 	upstreamCalled := 0
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -259,10 +259,9 @@ func TestPolicyRoundTripper_OrderCreation_AlwaysForwards(t *testing.T) {
 // mock upstream DOES receive this request. This is the exact call the
 // official razorpay-mcp-server's fetch_tokens tool makes (via
 // client.Customer.Create with fail_existing:"0") before listing saved
-// payment methods; a policy-gated client denying it outright as an
-// unrecognized write was a real, live-confirmed bug (2026-09-05, Step 4 of
-// the MCP composition work) that broke fetch_tokens identically to how the
-// order_creation gap once broke every debit.
+// payment methods; without this passthrough, a policy-gated client denies
+// it outright as an unrecognized write, breaking fetch_tokens the same way
+// an unclassified order-creation call breaks every debit.
 func TestPolicyRoundTripper_CustomerLookup_AlwaysForwards(t *testing.T) {
 	upstreamCalled := 0
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -589,13 +588,13 @@ func TestPolicyRoundTripper_SystemError_Returns503NotDenial(t *testing.T) {
 // so this test fails loudly (not just with a wrong status code) if that
 // ordering ever regresses.
 //
-// This is also, explicitly, the no-regression proof for BootAgentID
-// (added alongside MANDATE_AGENT_ID): rt.BootAgentID is left at its zero
-// value here — unset, exactly as every direct internal/mandate or
-// cmd/mandate-cli caller runs today — so a missing wire agent_id must still
-// be rejected exactly as it always was. If BootAgentID's fallback logic
-// ever accidentally engaged when no boot value was actually configured,
-// this test would start passing panicResolver a real agent_id and panic.
+// This is also, explicitly, the no-regression proof for BootAgentID: with
+// rt.BootAgentID left at its zero value here — unset, exactly as every
+// direct internal/mandate or cmd/mandate-cli caller runs — a missing wire
+// agent_id must still be rejected exactly as it always was. If
+// BootAgentID's fallback logic ever accidentally engaged when no boot
+// value was actually configured, this test would start passing
+// panicResolver a real agent_id and panic.
 func TestPolicyRoundTripper_MissingAgentID_DeniedImmediately(t *testing.T) {
 	upstream := noUpstreamServer(t)
 	defer upstream.Close()

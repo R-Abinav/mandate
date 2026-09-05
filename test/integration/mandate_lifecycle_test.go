@@ -81,8 +81,8 @@ func TestMandateLifecycle(t *testing.T) {
 	//
 	// token_TXriCwptx38v9J is the ONLY token with a proven, genuine success
 	// on record (two real captured debits, ADR-0003) and is used here for
-	// that reason alone. As of 2026-09-04 it is blocked by an exhausted
-	// daily pre-debit-notification quota, not by any defect — see step 8's
+	// that reason alone. It is currently blocked by an exhausted daily
+	// pre-debit-notification quota, not by any defect — see step 8's
 	// comment below for the four other tokens tried and why none of them
 	// are usable as a substitute.
 	//
@@ -135,7 +135,7 @@ func TestMandateLifecycle(t *testing.T) {
 
 	// (3) AuthorizeMandate — REPLACED.
 	// The card S2S authorization path (AuthorizeMandate / CreateRecurringPayment)
-	// was removed when we pivoted to Registration Links. Coverage is in
+	// was removed in favor of Registration Links. Coverage is in
 	// test/integration/registration_link_test.go (TestRegistrationLink_*).
 	t.Run("3_AuthorizeMandate_Skipped", func(t *testing.T) {
 		t.Skip("AuthorizeMandate removed: card S2S path gated by PCI-DSS cert. " +
@@ -162,10 +162,10 @@ func TestMandateLifecycle(t *testing.T) {
 	})
 
 	// (7) In-cap debit — uses token_TXriCwptx38v9J, the only token with a
-	// proven genuine capture on record. As of 2026-09-04 this token is
-	// blocked by an exhausted daily pre-debit-notification quota (see the
-	// comment above validTokenID and step 8 below), so a live re-record will
-	// fail with that quota error until it resets — expected, not a defect.
+	// proven genuine capture on record. This token is currently blocked by
+	// an exhausted daily pre-debit-notification quota (see the comment
+	// above validTokenID and step 8 below), so a live re-record will fail
+	// with that quota error until it resets — expected, not a defect.
 	// See also execute_debit_test.go's
 	// TestExecuteMandateDebit_SucceedsWithFetchedContactInfo for the
 	// dedicated, cassette-backed regression coverage of this same call.
@@ -195,24 +195,20 @@ func TestMandateLifecycle(t *testing.T) {
 	})
 
 	// (8) Debit exceeding max_amount — skipped. Quota-blocked on the working
-	// token as of 2026-09-04; four independently-registered tokens since
-	// then (two cards tested) all reproducibly fail authorization regardless
-	// of amount, cause under investigation with Razorpay support, ticket
-	// open. Don't assert anything against a token known to be broken.
+	// token; four independently-registered tokens since (two cards tested)
+	// all reproducibly fail authorization regardless of amount, cause under
+	// investigation with Razorpay support, ticket open. Don't assert
+	// anything against a token known to be broken.
 	//
-	// History, kept for the record: the earlier flaky-looking live behavior
-	// (4/5 captured, 1/5 uncaptured for an identical over-cap request,
-	// observed against token_TXriCwptx38v9J before quota exhaustion) was
-	// diagnosed as the compact-envelope bug — a genuinely
-	// uncaptured/unauthorized payment misreported as success by the
-	// response-parsing fallback, not real non-determinism in Razorpay's cap
-	// enforcement. That bug is fixed, and the retry/poll logic is already
-	// covered deterministically (fixture-based, no live dependency) by the
-	// TestVerifyCompactEnvelopeCapture_* tests in internal/mandate/execute_test.go.
-	// This step's actual job — prove the full lifecycle test surfaces an
-	// over-cap debit as a distinguishable failure end-to-end, through the
-	// real live call path — remains unverified until a genuinely working
-	// token is available again. See ADR-0003 for the full investigation.
+	// The uncaptured/unauthorized-payment-misreported-as-success failure
+	// mode this step would otherwise exercise is the compact-envelope bug,
+	// fixed and covered deterministically (fixture-based, no live
+	// dependency) by the TestVerifyCompactEnvelopeCapture_* tests in
+	// internal/mandate/execute_test.go. This step's own job — proving the
+	// full lifecycle test surfaces an over-cap debit as a distinguishable
+	// failure end-to-end, through the real live call path — remains
+	// unverified until a genuinely working token is available again. See
+	// ADR-0003 for the full investigation.
 	t.Run("8_ExecuteDebit_MaxAmountExceeded", func(t *testing.T) {
 		t.Skip("Quota-blocked on the working token as of 2026-09-04; four " +
 			"independently-registered tokens since then (two cards tested) all " +
