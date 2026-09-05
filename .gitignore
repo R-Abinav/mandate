@@ -35,6 +35,7 @@ go.work.sum
 #others
 order.json
 .rehearsal-scratch/
+.DS_Store
 
 # build files
 /mandate-*
