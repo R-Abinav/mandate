@@ -12,19 +12,21 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/R-Abinav/mandate/internal/config"
+	"github.com/R-Abinav/mandate/internal/logging"
 	"github.com/R-Abinav/mandate/internal/policy"
 	"github.com/R-Abinav/mandate/internal/store"
 )
 
 func main() {
+	logger := logging.New(config.Load().LogLevel)
 	if err := run(os.Args[1:]); err != nil {
-		log.Fatal(err)
+		logger.Error("mandate-cli: fatal", "error", err)
+		os.Exit(1)
 	}
 }
 
@@ -206,11 +208,11 @@ func confirmCommand(
 	if err != nil {
 		switch {
 		case errors.Is(err, store.ErrProposalNotFound):
-			return fmt.Errorf("no proposal found with ID %q", proposalID)
+			return fmt.Errorf("no proposal found with ID %q: %w", proposalID, err)
 		case errors.Is(err, store.ErrProposalExpired):
-			return fmt.Errorf("proposal %q expired — run propose again", proposalID)
+			return fmt.Errorf("proposal %q expired — run propose again: %w", proposalID, err)
 		case errors.Is(err, store.ErrProposalAlreadyConsumed):
-			return fmt.Errorf("proposal %q was already confirmed", proposalID)
+			return fmt.Errorf("proposal %q was already confirmed: %w", proposalID, err)
 		default:
 			return err
 		}

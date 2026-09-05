@@ -8,7 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 
 	"github.com/R-Abinav/mandate/internal/audit"
@@ -53,9 +53,11 @@ type PolicyRoundTripper struct {
 	// on allow. Defaults to http.DefaultTransport if nil.
 	Next http.RoundTripper
 
-	// Logger receives one line per policy decision, with any Authorization
-	// header redacted. Defaults to log.Default() if nil.
-	Logger *log.Logger
+	// Logger receives one structured record per policy decision, with any
+	// Authorization header redacted. An explicit, injected dependency —
+	// never a package-level global, the same convention AuditStore already
+	// establishes. Defaults to slog.Default() if nil.
+	Logger *slog.Logger
 }
 
 func (p *PolicyRoundTripper) next() http.RoundTripper {
@@ -65,11 +67,11 @@ func (p *PolicyRoundTripper) next() http.RoundTripper {
 	return http.DefaultTransport
 }
 
-func (p *PolicyRoundTripper) logger() *log.Logger {
+func (p *PolicyRoundTripper) logger() *slog.Logger {
 	if p.Logger != nil {
 		return p.Logger
 	}
-	return log.Default()
+	return slog.Default()
 }
 
 // RoundTrip classifies the outgoing request, evaluates recognized writes
@@ -106,9 +108,9 @@ func (p *PolicyRoundTripper) RoundTrip(req *http.Request) (*http.Response, error
 	// Evaluate at all. See docs/adr/0004_transport_layer_gateway.md's
 	// "Order creation: a fourth passthrough category" section.
 	if category == CategoryOrderCreation {
-		p.logger().Printf(
-			"mandate-gateway order_creation: passthrough, no monetary risk method=%s path=%s",
-			req.Method, req.URL.Path,
+		p.logger().Info("order_creation: passthrough, no monetary risk",
+			"method", req.Method,
+			"path", req.URL.Path,
 		)
 		return p.next().RoundTrip(req)
 	}
@@ -219,8 +221,9 @@ func (p *PolicyRoundTripper) RoundTrip(req *http.Request) (*http.Response, error
 			Reason:      decision.Reason,
 		})
 		if intentErr != nil {
-			p.logger().
-				Printf("mandate-gateway audit: LogIntent failed, denying request: %v", intentErr)
+			p.logger().Error("audit: LogIntent failed, denying request",
+				"error", intentErr,
+			)
 			return syntheticSystemErrorResponse(
 				req,
 				fmt.Errorf("audit LogIntent failed: %w", intentErr),
@@ -245,8 +248,10 @@ func (p *PolicyRoundTripper) RoundTrip(req *http.Request) (*http.Response, error
 			intentID,
 			outcomeReason,
 		); outcomeErr != nil {
-			p.logger().
-				Printf("mandate-gateway audit: LogOutcome failed for intent %d: %v", intentID, outcomeErr)
+			p.logger().Error("audit: LogOutcome failed",
+				"intent_id", intentID,
+				"error", outcomeErr,
+			)
 		}
 	}
 
@@ -346,7 +351,9 @@ func (p *PolicyRoundTripper) logResolved(ctx context.Context, payload audit.Payl
 		return
 	}
 	if _, err := audit.LogResolved(ctx, p.AuditStore, payload); err != nil {
-		p.logger().Printf("mandate-gateway audit: LogResolved failed: %v", err)
+		p.logger().Error("audit: LogResolved failed",
+			"error", err,
+		)
 	}
 }
 
@@ -432,10 +439,17 @@ func redactedHeaders(h http.Header) http.Header {
 	return clone
 }
 
-// logDecision writes one line per policy decision. Authorization is
-// redacted unconditionally, on both the deny and allow paths — there is no
-// code path in RoundTrip that logs headers without going through this
+// logDecision writes one structured record per policy decision. Authorization
+// is redacted unconditionally, on both the deny and allow paths — there is
+// no code path in RoundTrip that logs headers without going through this
 // function first.
+//
+// Level is chosen by err, not by decision.Allowed: a genuine policy
+// decision — allowed or denied — is Info, the system correctly doing its
+// job (the same ADR-0002 three-way contract this whole codebase follows:
+// "we know, and it's yes/no" is normal operation, never a failure). Only
+// err != nil ("we don't know") is Error — a real system failure, not a
+// decision at all.
 func (p *PolicyRoundTripper) logDecision(
 	req *http.Request,
 	category string,
@@ -443,8 +457,18 @@ func (p *PolicyRoundTripper) logDecision(
 	decision policy.Decision,
 	err error,
 ) {
-	p.logger().Printf(
-		"mandate-gateway decision: method=%s path=%s category=%q amount_paise=%d allowed=%v reason=%q err=%v headers=%v",
-		req.Method, req.URL.Path, category, amountPaise, decision.Allowed, decision.Reason, err, redactedHeaders(req.Header),
-	)
+	attrs := []any{
+		"method", req.Method,
+		"path", req.URL.Path,
+		"category", category,
+		"amount_paise", amountPaise,
+		"allowed", decision.Allowed,
+		"reason", decision.Reason,
+		"headers", redactedHeaders(req.Header),
+	}
+	if err != nil {
+		p.logger().Error("decision", append(attrs, "error", err)...)
+		return
+	}
+	p.logger().Info("decision", attrs...)
 }

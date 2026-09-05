@@ -6,24 +6,29 @@
 package main
 
 import (
-	"log"
+	"log/slog"
+	"os"
 
 	"github.com/R-Abinav/mandate/internal/config"
 	"github.com/R-Abinav/mandate/internal/gateway"
+	"github.com/R-Abinav/mandate/internal/logging"
 )
 
 func main() {
-	if err := run(); err != nil {
-		log.Fatal(err)
+	cfg := config.Load()
+	logger := logging.New(cfg.LogLevel)
+
+	if err := run(cfg, logger); err != nil {
+		logger.Error("mandate-gateway: fatal", "error", err)
+		os.Exit(1)
 	}
 }
 
 // run performs all fallible setup and returns the first error encountered,
-// rather than calling log.Fatal directly. main calling log.Fatal exactly
-// once, outside this function, means no deferred cleanup (db.Close) is ever
-// skipped by an early exit mid-setup.
-func run() error {
-	cfg := config.Load()
+// rather than exiting directly. main exiting exactly once, outside this
+// function, means no deferred cleanup (db.Close) is ever skipped by an
+// early exit mid-setup.
+func run(cfg config.Env, logger *slog.Logger) error {
 
 	// Multi-agent scoping (docs/adr/0006_multi_agent_scoping.md) replaced
 	// the single-policy-at-boot model this process used through Phase 5.
@@ -43,13 +48,13 @@ func run() error {
 	// gateway.NewGatedClient — the single source of truth for it, so
 	// nothing else needing this same wiring (e.g. a rehearsal driver)
 	// duplicates it by hand.
-	_, db, _, err := gateway.NewGatedClient(cfg)
+	_, db, _, err := gateway.NewGatedClient(cfg, logger)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = db.Close() }()
 
-	log.Print("mandate-gateway: configured — resolving policies per request by agent_id")
+	logger.Info("mandate-gateway: configured — resolving policies per request by agent_id")
 
 	// Wiring only, for this phase: client is fully gated and ready. Future
 	// phases attach the actual serving surface (MCP tools, audit logging)

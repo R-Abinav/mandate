@@ -19,6 +19,7 @@ type Env struct {
 	GeminiAPIKey                  string
 	GeminiModel                   string
 	LLMProvider                   string
+	LogLevel                      string
 	DatabaseURL                   string
 	DatabaseURLTest               string
 	DatabaseMaxOpenConnections    int
@@ -69,6 +70,7 @@ func Load() Env {
 		GeminiAPIKey:               os.Getenv("GEMINI_API_KEY"),
 		GeminiModel:                os.Getenv("GEMINI_MODEL"),
 		LLMProvider:                os.Getenv("LLM_PROVIDER"),
+		LogLevel:                   os.Getenv("LOG_LEVEL"),
 		DatabaseURL:                os.Getenv("DATABASE_URL"),
 		DatabaseURLTest:            os.Getenv("DATABASE_URL_TEST"),
 		DatabaseMaxOpenConnections: parseInt(os.Getenv("DATABASE_MAX_OPEN_CONNECTIONS"), 25),

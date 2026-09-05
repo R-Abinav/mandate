@@ -8,16 +8,19 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"log"
+	"os"
 
 	"github.com/R-Abinav/mandate/internal/audit"
 	"github.com/R-Abinav/mandate/internal/config"
+	"github.com/R-Abinav/mandate/internal/logging"
 	_ "github.com/lib/pq"
 )
 
 func main() {
+	logger := logging.New(config.Load().LogLevel)
 	if err := run(); err != nil {
-		log.Fatal(err)
+		logger.Error("mandate-verify: fatal", "error", err)
+		os.Exit(1)
 	}
 }
 

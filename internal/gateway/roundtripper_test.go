@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -296,7 +296,13 @@ func TestPolicyRoundTripper_UnrecognizedWrite_DeniedByDefault(t *testing.T) {
 
 // TestPolicyRoundTripper_RedactsAuthorization greps the actual captured log
 // output for the raw header value — not a structural assertion, a literal
-// search for the secret, on both the deny and allow paths.
+// search for the secret, on both the deny and allow paths. Re-proven against
+// the slog-based logger (migrated from *log.Logger): a real
+// slog.TextHandler writing to a buffer, the same lightweight test-double
+// pattern internal/logging's own tests use, not a hand-rolled mock —
+// redaction happens in redactedHeaders before the value ever reaches the
+// logger, so nothing about switching logging mechanisms could silently
+// bring it back.
 func TestPolicyRoundTripper_RedactsAuthorization(t *testing.T) {
 	const rawSecret = "Bearer super-secret-key-do-not-leak"
 
@@ -314,7 +320,7 @@ func TestPolicyRoundTripper_RedactsAuthorization(t *testing.T) {
 		Resolver: fakeStore,
 		Store:    fakeStore,
 		Next:     http.DefaultTransport,
-		Logger:   log.New(&logBuf, "", 0),
+		Logger:   slog.New(slog.NewTextHandler(&logBuf, nil)),
 	}
 	client := &http.Client{Transport: rt}
 

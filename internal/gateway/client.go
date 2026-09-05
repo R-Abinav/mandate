@@ -3,6 +3,7 @@ package gateway
 import (
 	"database/sql"
 	"fmt"
+	"log/slog"
 	"net/http"
 
 	"github.com/R-Abinav/mandate/internal/audit"
@@ -29,7 +30,14 @@ import (
 // auditStore parameter, for its resolution entries) reuses this one
 // instance rather than constructing a second, redundant one against the
 // same database.
-func NewGatedClient(cfg config.Env) (*razorpay.Client, *sql.DB, audit.Store, error) {
+//
+// logger is threaded through explicitly, not read from a global — the same
+// convention every dependency here follows — and installed as the
+// PolicyRoundTripper's Logger field.
+func NewGatedClient(
+	cfg config.Env,
+	logger *slog.Logger,
+) (*razorpay.Client, *sql.DB, audit.Store, error) {
 	if cfg.RazorpayKeyID == "" || cfg.RazorpayKeySecret == "" {
 		return nil, nil, nil, fmt.Errorf(
 			"gateway: RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET are required",
@@ -63,6 +71,7 @@ func NewGatedClient(cfg config.Env) (*razorpay.Client, *sql.DB, audit.Store, err
 			Store:      policyStore,
 			AuditStore: auditStore,
 			Next:       http.DefaultTransport,
+			Logger:     logger,
 		},
 	}
 
