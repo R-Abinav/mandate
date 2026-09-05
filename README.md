@@ -116,4 +116,6 @@ mandate-verify
 
 ## License
 
-There is no license file in this repository yet.
+MIT. See [`LICENSE`](LICENSE).
+
+`razorpay-go` and `razorpay-mcp-server` are themselves MIT-licensed dependencies (confirmed directly against each module's own `LICENSE` file), part of why this project can be built as an ordinary import with zero forked code, the same claim `docs/adr/0007_mcp_composition.md` verifies for the dependency relationship itself.
