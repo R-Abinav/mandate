@@ -1,7 +1,7 @@
 name: CI
 
 # NOTE (2026-09-04): the test-integration job below is EXPECTED to be red
-# right now, for three known, documented reasons — not a silent regression:
+# right now, for two known, documented reasons — not a silent regression:
 #   1. TestMandateLifecycle/7_ExecuteDebit_InCap: cassette predates the
 #      compact-envelope capture-verification fix, so replay fails with
 #      "requested interaction not found." See the comment directly above
@@ -12,14 +12,12 @@ name: CI
 #      pre-debit-notification quota on the only available token (confirmed
 #      by direct live attempt, not assumed). See the comment above that
 #      subtest for the full record.
-#   3. TestPolicyStore_Concurrency (internal/store): requires a live
-#      Postgres via DATABASE_URL_TEST, which this workflow does not
-#      currently provision (no Postgres service configured in this job).
-#      This is a separate, pre-existing gap, not something introduced with
-#      (1) or (2) — see docs/adr for the local-Postgres CI follow-up.
-# Do not "fix" this job by loosening assertions or scoping tests out; each
-# of the above needs its own real fix (a re-record once quota resets, and a
-# Postgres service wired into this job), not a workaround here.
+# Do not "fix" this job by loosening assertions or scoping tests out; (1)
+# and (2) need a real fix — a live re-record once quota resets — not a
+# workaround here. The previous third reason (no Postgres provisioned in
+# this job, so DATABASE_URL_TEST-dependent tests like
+# TestPolicyStore_Concurrency had nothing to run against) is fixed below:
+# a postgres service container plus a migration step now provision it.
 on:
   push:
     branches:
@@ -61,6 +59,30 @@ jobs:
     # Known red today — see the dated note at the top of this file. Left
     # blocking (no continue-on-error) so the state stays visible in CI
     # rather than silently muted.
+    services:
+      # Same image, credentials, and healthcheck as docker-compose.yml's
+      # own Postgres service — not a separate, drifting definition.
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: mandate_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d mandate_test"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # Steps in this job run directly on the runner, not inside a
+      # container, so the postgres service (published via ports: above) is
+      # reachable at localhost. Both vars point at it: DATABASE_URL_TEST is
+      # what every current integration test actually reads; DATABASE_URL
+      # is set too in case anything ever reads that instead.
+      DATABASE_URL_TEST: postgres://postgres:password@localhost:5432/mandate_test?sslmode=disable
+      DATABASE_URL: postgres://postgres:password@localhost:5432/mandate_test?sslmode=disable
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -73,6 +95,21 @@ jobs:
 
       - name: Install dependencies
         run: go mod download
+
+      - name: Run database migrations
+        # Same migrate/migrate image and version already proven against
+        # this exact migrations/ directory in the Docker work
+        # (docker-compose.yml's migrate service) — not a different
+        # mechanism. --network host so this one-off container reaches the
+        # postgres service via the runner's localhost, the same way the
+        # steps above do.
+        run: |
+          docker run --rm --network host \
+            -v ${{ github.workspace }}/migrations:/migrations \
+            migrate/migrate:v4.17.1 \
+            -path=/migrations \
+            -database "postgres://postgres:password@localhost:5432/mandate_test?sslmode=disable" \
+            up
 
       - name: Integration tests (tagged)
         run: go test -v -race -tags=integration ./...
