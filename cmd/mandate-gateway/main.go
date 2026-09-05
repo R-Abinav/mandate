@@ -6,17 +6,10 @@
 package main
 
 import (
-	"database/sql"
-	"errors"
-	"fmt"
 	"log"
-	"net/http"
 
-	"github.com/R-Abinav/mandate/internal/audit"
 	"github.com/R-Abinav/mandate/internal/config"
 	"github.com/R-Abinav/mandate/internal/gateway"
-	"github.com/R-Abinav/mandate/internal/store"
-	razorpay "github.com/razorpay/razorpay-go"
 )
 
 func main() {
@@ -32,38 +25,11 @@ func main() {
 func run() error {
 	cfg := config.Load()
 
-	if cfg.RazorpayKeyID == "" || cfg.RazorpayKeySecret == "" {
-		return errors.New("mandate-gateway: RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET are required")
-	}
-	if cfg.DatabaseURL == "" {
-		return errors.New("mandate-gateway: DATABASE_URL is required")
-	}
-
-	db, err := sql.Open("postgres", cfg.DatabaseURL)
-	if err != nil {
-		return fmt.Errorf("mandate-gateway: failed to open database: %w", err)
-	}
-	defer func() { _ = db.Close() }()
-
-	db.SetMaxOpenConns(cfg.DatabaseMaxOpenConnections)
-	db.SetMaxIdleConns(cfg.DatabaseMaxIdleConnections)
-	db.SetConnMaxLifetime(cfg.DatabaseMaxConnectionLifetime)
-
-	if err := db.Ping(); err != nil {
-		return fmt.Errorf("mandate-gateway: database unreachable: %w", err)
-	}
-
-	policyStore := store.NewPostgresPolicyStore(db)
-	auditStore := audit.NewPostgresStore(db)
-
 	// Multi-agent scoping (docs/adr/0006_multi_agent_scoping.md) replaced
 	// the single-policy-at-boot model this process used through Phase 5.
 	// There is no longer one Policy value loaded here: PolicyRoundTripper
 	// now resolves a policy per request, keyed by the agent_id carried in
-	// notes.mandate_agent_id on the wire. policyStore satisfies
-	// policy.PolicyResolver structurally (GetPolicyByAgentID) — the same
-	// value already used for Store (TryRecordDebit), no separate resolver
-	// type needed.
+	// notes.mandate_agent_id on the wire.
 	//
 	// MANDATE_POLICY_ID is gone, not repurposed as a fallback/default
 	// policy for a request with no resolvable agent_id: internal/policy's
@@ -72,15 +38,16 @@ func run() error {
 	// reintroduce exactly the default this design forbids. See
 	// docs/adr/0006_multi_agent_scoping.md's "MANDATE_POLICY_ID" section
 	// for the explicit reasoning.
-	client := razorpay.NewClient(cfg.RazorpayKeyID, cfg.RazorpayKeySecret)
-	client.HTTPClient = &http.Client{
-		Transport: &gateway.PolicyRoundTripper{
-			Resolver:   policyStore,
-			Store:      policyStore,
-			AuditStore: auditStore,
-			Next:       http.DefaultTransport,
-		},
+	//
+	// The actual client/DB/policy-store/audit-store wiring lives in
+	// gateway.NewGatedClient — the single source of truth for it, so
+	// nothing else needing this same wiring (e.g. a rehearsal driver)
+	// duplicates it by hand.
+	_, db, _, err := gateway.NewGatedClient(cfg)
+	if err != nil {
+		return err
 	}
+	defer func() { _ = db.Close() }()
 
 	log.Print("mandate-gateway: configured — resolving policies per request by agent_id")
 

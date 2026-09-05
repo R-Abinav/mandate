@@ -51,29 +51,85 @@ Build `internal/gateway` as three pieces: a stateless classifier, a
 `http.RoundTripper` that uses it, and a construction site in
 `cmd/mandate-gateway/main.go`.
 
-### Three-category classification
+### Category classification
 
-`Classify(req *http.Request, body []byte) (category string, amountPaise int64, ok bool)`
-returns exactly one of three outcomes:
+`Classify(req *http.Request, body []byte) (category string, amountPaise int64, requestID string, agentID string, ok bool)`
+returns exactly one of five outcomes:
 
 | Category | Trigger | Amount source | Goes through `policy.Evaluate`? |
 |---|---|---|---|
 | `registration` | `POST /v1/subscription_registration/auth_links` | `subscription_registration.max_amount` | Yes |
 | `debit_execution` | `POST /v1/payments/create/recurring` | top-level `amount` | Yes |
 | `read_only` | any `GET`, any path | n/a (0) | No — forwarded unconditionally |
+| `order_creation` | `POST /v1/orders` | n/a (0) | No — forwarded unconditionally |
 | *(unrecognized)* | anything else write-shaped | n/a | No — denied by default (`ok=false`) |
 
-`read_only` is unconditional on method alone, not on path, and is the one
-category that never touches policy at all. This is deliberate:
-`internal/mandate` polls Razorpay repeatedly — `FetchTokenStatus`,
-`WaitForNewConfirmedToken`, `FetchSavedPaymentMethods` all issue `GET`
-requests, none of which move money. Gating them would be both incorrect
-(they aren't debits) and a functional regression (breaking the polling loops
-those functions depend on to ever return).
+`read_only` is unconditional on method alone, not on path, and is one of two
+categories that never touch policy at all (`order_creation` is the other —
+see below). This is deliberate: `internal/mandate` polls Razorpay
+repeatedly — `FetchTokenStatus`, `WaitForNewConfirmedToken`,
+`FetchSavedPaymentMethods` all issue `GET` requests, none of which move
+money. Gating them would be both incorrect (they aren't debits) and a
+functional regression (breaking the polling loops those functions depend on
+to ever return).
 
-Anything that isn't a `GET` and isn't one of the two known `POST` paths — or
-is a known path whose body doesn't parse the way it should — is denied by
-default. `Classify` never guesses that an unrecognized write is safe.
+Anything that isn't a `GET`, isn't `order_creation`, and isn't one of the
+two gated `POST` write paths — or is a gated path whose body doesn't parse
+the way it should — is denied by default. `Classify` never guesses that an
+unrecognized write is safe.
+
+### Order creation: a fourth passthrough category (added 2026-09-05)
+
+Live end-to-end rehearsal that day was the first time anything in this
+codebase had ever run `internal/mandate.ExecuteMandateDebit` through a
+`PolicyRoundTripper`-wrapped client — every prior test either used a raw
+VCR transport with no gating at all (`mandate_lifecycle_test.go`) or
+constructed requests directly against `debitExecutionPath`, bypassing
+`ExecuteMandateDebit`'s real call sequence entirely
+(`internal/gateway`'s own tests, before this addition). That rehearsal
+found the gap immediately: `ExecuteMandateDebit`'s `createDebitOrder`
+posts to `/v1/orders` — a real Razorpay API call, required before the
+actual recurring-payment call — and `Classify` had no case for it, so it
+fell through to `ok=false` and was denied as an unrecognized write. Every
+debit attempt through a gated client failed before it ever reached the
+call `policy.Evaluate` was built to gate.
+
+**The fix is a new category, not an alias for `read_only`.** `order_creation`
+passes through unconditionally — no `policy.Evaluate` call, no cap check —
+exactly like `read_only`. But it is not folded into `CategoryReadOnly`: a
+`GET` and an inert money-staging `POST` are being let through for different
+reasons (one reads and moves nothing at all; the other creates a real
+resource but moves no money), and collapsing that distinction would make it
+invisible in both the code and the logs. `order_creation` gets its own
+category constant, its own one-line log entry
+(`order_creation: passthrough, no monetary risk`) distinguishing it from
+`read_only`'s silence, and — deliberately — no audit-chain entry: it is not
+a policy decision (it never reaches `policy.Evaluate`), so it must not look
+like one in the audit trail the way an `allowed`/`denied`/`system_error`
+entry does.
+
+**Why this carries no money-movement risk, stated explicitly, not assumed.**
+Creating a Razorpay order (`POST /v1/orders`) stages an amount and a
+receipt; it does not authorize or capture anything, and no money moves as a
+result of this call alone. Capture only ever happens at the subsequent
+`POST /v1/payments/create/recurring` call — `debit_execution` — which
+remains fully gated through `policy.Evaluate` exactly as before. An
+attacker (or a bug) that could create arbitrary orders but never reach the
+gated recurring-payment call gains nothing: an uncharged order sitting in
+Razorpay is not a debit.
+
+**The systemic pattern this establishes, for the next write category
+someone adds here:** the question to ask is never "is this a `POST`" — it's
+**"can money actually move via this call alone?"** `order_creation` is a
+`POST` that fails that test (no capture, no capability to move money by
+itself) and is therefore a passthrough. `debit_execution` and
+`registration` are `POST`s that pass that test (a capture or a mandate
+authorization can result directly from the call) and must stay gated.
+Classifying by HTTP method alone would have caught this bug from the start
+in the wrong direction — gating a call that can't move money — or missed a
+real risk in the other direction, if a future Razorpay endpoint that *can*
+move money were mistaken for a safe passthrough by surface resemblance to
+this one. The test is about capability, not verb.
 
 ### Fail-closed default
 
@@ -96,7 +152,10 @@ On every call:
    other logic runs. `http.Request.Body` is a single-read stream; every
    downstream path (classify, evaluate, forward) sees the same intact body
    regardless of which branch is taken.
-2. `read_only` forwards immediately, no policy call.
+2. `read_only` and `order_creation` both forward immediately, no policy
+   call — see "Order creation: a fourth passthrough category" for why
+   `order_creation` is its own category rather than an alias for
+   `read_only`.
 3. An unrecognized write returns a synthetic `403` — the network is never
    touched.
 4. A recognized write is evaluated via `policy.Evaluate` exactly as Phase 1

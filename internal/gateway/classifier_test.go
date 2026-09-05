@@ -176,6 +176,37 @@ func TestClassify_ReadOnly_TokenListingPoll(t *testing.T) {
 	}
 }
 
+// TestClassify_OrderCreation confirms POST /v1/orders classifies as its own
+// CategoryOrderCreation, distinct from both CategoryReadOnly and an
+// unrecognized write — and, unlike a gated write, carries no amount,
+// requestID, or agentID (createDebitOrder's body has no notes map at all,
+// and none of those fields are meaningful for a call that never evaluates
+// against a cap).
+func TestClassify_OrderCreation(t *testing.T) {
+	req := newRequest(t, http.MethodPost, orderCreationPath)
+	body := []byte(`{"amount":10000,"currency":"INR","receipt":"mandate-debit-req_x"}`)
+
+	category, amountPaise, requestID, agentID, ok := Classify(req, body)
+	if !ok {
+		t.Fatal("expected ok=true for a POST /v1/orders request")
+	}
+	if category != CategoryOrderCreation {
+		t.Fatalf("expected category=%q, got %q", CategoryOrderCreation, category)
+	}
+	if amountPaise != 0 {
+		t.Fatalf(
+			"expected amountPaise=0 for order_creation (not policy-evaluated), got %d",
+			amountPaise,
+		)
+	}
+	if requestID != "" {
+		t.Fatalf("expected empty requestID for order_creation, got %q", requestID)
+	}
+	if agentID != "" {
+		t.Fatalf("expected empty agentID for order_creation, got %q", agentID)
+	}
+}
+
 func TestClassify_UnrecognizedWrite_UnknownPath(t *testing.T) {
 	req := newRequest(t, http.MethodPost, "/v1/payments/create/upi")
 	body := []byte(`{"amount":100}`)

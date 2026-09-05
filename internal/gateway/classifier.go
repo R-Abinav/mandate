@@ -22,6 +22,22 @@ const (
 	// CategoryReadOnly identifies any GET request. Read-only calls pass
 	// straight through the gateway with no policy check.
 	CategoryReadOnly = "read_only"
+
+	// CategoryOrderCreation identifies a POST /v1/orders call —
+	// internal/mandate's createDebitOrder, the order-staging step
+	// ExecuteMandateDebit performs before the actual recurring-payment
+	// call. Passes through unconditionally, exactly like CategoryReadOnly,
+	// but kept as its own, distinctly-named category rather than folded
+	// into CategoryReadOnly: a GET and an inert money-staging POST are
+	// different things being let through for different reasons (one moves
+	// no data at all, the other creates a real order resource but moves no
+	// money), and collapsing that distinction would make it invisible in
+	// both the code and the logs. See
+	// docs/adr/0004_transport_layer_gateway.md's "Order creation: a fourth
+	// passthrough category" section for why this carries no money-movement
+	// risk — capture only ever happens at the subsequent, fully-gated
+	// debit_execution call.
+	CategoryOrderCreation = "order_creation"
 )
 
 // registrationLinkPath is the exact path CreateRegistrationLink posts to.
@@ -35,6 +51,17 @@ const registrationLinkPath = "/v1/subscription_registration/auth_links"
 // calls client.Payment.CreateRecurringPayment, which the razorpay-go SDK
 // resolves to this path (see ADR-0003's endpoint investigation).
 const debitExecutionPath = "/v1/payments/create/recurring"
+
+// orderCreationPath is the exact path createDebitOrder posts to, confirmed
+// against source: internal/mandate/execute.go calls client.Order.Create
+// before every recurring-payment call, to stage the order the debit
+// references. Discovered live (2026-09-05) that a policy-gated client
+// denied this call outright as an unrecognized write — no test anywhere in
+// this codebase had exercised ExecuteMandateDebit through a
+// PolicyRoundTripper end-to-end before that rehearsal — breaking every
+// real debit attempt before it ever reached the call policy.Evaluate
+// actually needs to gate.
+const orderCreationPath = "/v1/orders"
 
 // Classify inspects an outbound Razorpay request and determines its policy
 // category, the amount in paise it represents, and — when the request
@@ -71,10 +98,19 @@ const debitExecutionPath = "/v1/payments/create/recurring"
 // (policy.ErrMissingAgentID) rather than falling back to anything — there
 // is no default policy to attribute an unattributed request to.
 //
-// Anything else write-shaped — any non-GET request that isn't one of the two
-// known paths, or a known path whose body doesn't parse the way it should —
-// returns ok=false. The caller must deny by default: an unrecognized write
-// is not assumed safe.
+// A POST to orderCreationPath is CategoryOrderCreation and also returns
+// ok=true unconditionally, alongside CategoryReadOnly — see
+// CategoryOrderCreation's doc comment for why this is a distinctly-labeled
+// passthrough rather than either a gated write or a silent alias for
+// CategoryReadOnly. No amount, requestID, or agentID is extracted for it:
+// createDebitOrder's request body carries none of those fields (no notes
+// map at all), and none would be meaningful for a call that never
+// evaluates against a cap.
+//
+// Anything else write-shaped — any non-GET request that isn't
+// orderCreationPath or one of the two gated write paths, or a gated path
+// whose body doesn't parse the way it should — returns ok=false. The
+// caller must deny by default: an unrecognized write is not assumed safe.
 func Classify(
 	req *http.Request,
 	body []byte,
@@ -85,6 +121,10 @@ func Classify(
 
 	if req.Method != http.MethodPost {
 		return "", 0, "", "", false
+	}
+
+	if req.URL.Path == orderCreationPath {
+		return CategoryOrderCreation, 0, "", "", true
 	}
 
 	switch req.URL.Path {
