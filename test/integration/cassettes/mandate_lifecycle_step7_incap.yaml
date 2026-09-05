@@ -1,0 +1,390 @@
+---
+version: 2
+interactions:
+    - id: 0
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: api.razorpay.com
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers:
+            Content-Type:
+                - application/json
+            User-Agent:
+                - razorpay-go/1.4.1
+        url: https://api.razorpay.com/v1/customers/cust_TXrhXepAQFpm3Q/tokens/token_TXriCwptx38v9J
+        method: GET
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        transfer_encoding:
+            - chunked
+        trailer: {}
+        content_length: -1
+        uncompressed: false
+        body: '{"id":"token_TXriCwptx38v9J","entity":"token","token":"HwYnrnhGZg5u75","bank":null,"wallet":null,"method":"card","card":{"entity":"card","name":"","last4":"4366","network":"Visa","type":"credit","issuer":"UTIB","international":false,"emi":true,"sub_type":"consumer","token_iin":"471860910","expiry_month":"01","expiry_year":"2099","flows":{"otp":true,"recurring":true},"cobranding_partner":null},"recurring":true,"recurring_details":{"status":"confirmed","failure_reason":null},"auth_type":null,"mrn":null,"used_at":1788510559,"created_at":1788504289,"expired_at":1790792999,"status":"failed","notes":[],"error_description":null,"source":"business","entity_id":null,"dcc_enabled":false,"max_amount":200000,"error_code":null,"compliant_with_tokenisation_guidelines":true}'
+        headers:
+            Cache-Control:
+                - max-age=0, must-revalidate, no-store, nocache, private
+            Connection:
+                - keep-alive
+            Content-Type:
+                - application/json
+            Date:
+                - Sat, 05 Sep 2026 06:52:58 GMT
+            Expires:
+                - Fri, 01 Jan 1990 00:00:00 GMT
+            Pragma:
+                - no-cache
+            Strict-Transport-Security:
+                - max-age=315360000; includeSubDomains
+            Via:
+                - rws
+            X-Frame-Options:
+                - SAMEORIGIN
+            X-Pam:
+                - "0"
+            X-Xss-Protection:
+                - "0"
+        status: 200 OK
+        code: 200
+        duration: 1.460515958s
+    - id: 1
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 74
+        transfer_encoding: []
+        trailer: {}
+        host: api.razorpay.com
+        remote_addr: ""
+        request_uri: ""
+        body: '{"amount":10000,"currency":"INR","receipt":"mandate-debit-req_incap_test"}'
+        form: {}
+        headers:
+            Content-Type:
+                - application/json
+            User-Agent:
+                - razorpay-go/1.4.1
+        url: https://api.razorpay.com/v1/orders
+        method: POST
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        transfer_encoding: []
+        trailer: {}
+        content_length: 237
+        uncompressed: false
+        body: '{"amount":10000,"amount_due":10000,"amount_paid":0,"attempts":0,"created_at":1788591180,"currency":"INR","entity":"order","id":"order_TYGNxvKw7oPru8","notes":[],"offer_id":null,"receipt":"mandate-debit-req_incap_test","status":"created"}'
+        headers:
+            Connection:
+                - keep-alive
+            Content-Length:
+                - "237"
+            Content-Type:
+                - application/json
+            Date:
+                - Sat, 05 Sep 2026 06:53:00 GMT
+            Strict-Transport-Security:
+                - max-age=315360000; includeSubDomains
+            Vary:
+                - Origin
+                - Origin
+            Via:
+                - rws
+            X-Xss-Protection:
+                - "0"
+        status: 200 OK
+        code: 200
+        duration: 151.915917ms
+    - id: 2
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: api.razorpay.com
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers:
+            Content-Type:
+                - application/json
+            User-Agent:
+                - razorpay-go/1.4.1
+        url: https://api.razorpay.com/v1/customers/cust_TXrhXepAQFpm3Q
+        method: GET
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        transfer_encoding: []
+        trailer: {}
+        content_length: 210
+        uncompressed: false
+        body: '{"id":"cust_TXrhXepAQFpm3Q", "entity":"customer", "name":"Discovery Test User", "email":"discovery@example.com", "contact":"9004739000", "gstin":null, "notes":[], "shipping_address":[], "created_at":1788504252}'
+        headers:
+            Connection:
+                - keep-alive
+            Content-Length:
+                - "210"
+            Content-Type:
+                - application/json
+            Date:
+                - Sat, 05 Sep 2026 06:53:00 GMT
+            Grpc-Metadata-Content-Type:
+                - application/grpc
+            Strict-Transport-Security:
+                - max-age=315360000; includeSubDomains
+            Via:
+                - rws
+            X-Xss-Protection:
+                - "0"
+        status: 200 OK
+        code: 200
+        duration: 101.005833ms
+    - id: 3
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 276
+        transfer_encoding: []
+        trailer: {}
+        host: api.razorpay.com
+        remote_addr: ""
+        request_uri: ""
+        body: '{"amount":10000,"contact":"9004739000","currency":"INR","customer_id":"cust_TXrhXepAQFpm3Q","email":"discovery@example.com","notes":{"mandate_agent_id":"","mandate_request_id":"req_incap_test"},"order_id":"order_TYGNxvKw7oPru8","recurring":true,"token":"token_TXriCwptx38v9J"}'
+        form: {}
+        headers:
+            Content-Type:
+                - application/json
+            User-Agent:
+                - razorpay-go/1.4.1
+        url: https://api.razorpay.com/v1/payments/create/recurring
+        method: POST
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        transfer_encoding:
+            - chunked
+        trailer: {}
+        content_length: -1
+        uncompressed: false
+        body: '{"razorpay_payment_id":"pay_TYGNz1EWEvlMIj","razorpay_order_id":"order_TYGNxvKw7oPru8","razorpay_signature":"aa808ff77f3bad7faab42bcb16a7d5b64058236e0e2f6969307a9ecc383d9649"}'
+        headers:
+            Cache-Control:
+                - max-age=0, must-revalidate, no-store, nocache, private
+            Connection:
+                - keep-alive
+            Content-Type:
+                - application/json
+            Date:
+                - Sat, 05 Sep 2026 06:53:03 GMT
+            Expires:
+                - Fri, 01 Jan 1990 00:00:00 GMT
+            Pragma:
+                - no-cache
+            Strict-Transport-Security:
+                - max-age=315360000; includeSubDomains
+            Uber-Trace-Id:
+                - e2b0c403e7b94157d9dd780b4ce7d3f7:b3ce057fc2f8131d:0000000000000000:1
+            Via:
+                - rws
+            X-Frame-Options:
+                - SAMEORIGIN
+            X-Pam:
+                - "0"
+            X-Xss-Protection:
+                - "0"
+        status: 200 OK
+        code: 200
+        duration: 2.972993666s
+    - id: 4
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: api.razorpay.com
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers:
+            Content-Type:
+                - application/json
+            User-Agent:
+                - razorpay-go/1.4.1
+        url: https://api.razorpay.com/v1/payments/pay_TYGNz1EWEvlMIj
+        method: GET
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        transfer_encoding:
+            - chunked
+        trailer: {}
+        content_length: -1
+        uncompressed: false
+        body: '{"id":"pay_TYGNz1EWEvlMIj","entity":"payment","amount":10000,"currency":"INR","status":"created","order_id":"order_TYGNxvKw7oPru8","invoice_id":null,"international":false,"method":"card","amount_refunded":0,"refund_status":null,"captured":false,"description":null,"card_id":"card_TXriCfk6I5xYgL","card":{"id":"card_TXriCfk6I5xYgL","entity":"card","name":"","last4":"4366","network":"Visa","type":"credit","issuer":"UTIB","international":false,"emi":true,"sub_type":"consumer","token_iin":"471860910"},"bank":null,"wallet":null,"vpa":null,"email":"discovery@example.com","contact":"+919004739000","customer_id":"cust_TXrhXepAQFpm3Q","token_id":"token_TXriCwptx38v9J","notes":{"mandate_agent_id":"","mandate_request_id":"req_incap_test"},"fee":null,"tax":null,"error_code":null,"error_description":null,"error_source":null,"error_step":null,"error_reason":null,"acquirer_data":{"auth_code":null},"created_at":1788591183}'
+        headers:
+            Cache-Control:
+                - max-age=0, must-revalidate, no-store, nocache, private
+            Connection:
+                - keep-alive
+            Content-Type:
+                - application/json
+            Date:
+                - Sat, 05 Sep 2026 06:53:07 GMT
+            Expires:
+                - Fri, 01 Jan 1990 00:00:00 GMT
+            Pragma:
+                - no-cache
+            Strict-Transport-Security:
+                - max-age=315360000; includeSubDomains
+            Uber-Trace-Id:
+                - 3b393a4c08862573a8eefe3974648a27:024f762930f59ce8:0000000000000000:1
+            Via:
+                - rws
+            X-Frame-Options:
+                - SAMEORIGIN
+            X-Pam:
+                - "0"
+            X-Xss-Protection:
+                - "0"
+        status: 200 OK
+        code: 200
+        duration: 549.782792ms
+    - id: 5
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: api.razorpay.com
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers:
+            Content-Type:
+                - application/json
+            User-Agent:
+                - razorpay-go/1.4.1
+        url: https://api.razorpay.com/v1/payments/pay_TYGNz1EWEvlMIj
+        method: GET
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        transfer_encoding:
+            - chunked
+        trailer: {}
+        content_length: -1
+        uncompressed: false
+        body: '{"id":"pay_TYGNz1EWEvlMIj","entity":"payment","amount":10000,"currency":"INR","status":"created","order_id":"order_TYGNxvKw7oPru8","invoice_id":null,"international":false,"method":"card","amount_refunded":0,"refund_status":null,"captured":false,"description":null,"card_id":"card_TXriCfk6I5xYgL","card":{"id":"card_TXriCfk6I5xYgL","entity":"card","name":"","last4":"4366","network":"Visa","type":"credit","issuer":"UTIB","international":false,"emi":true,"sub_type":"consumer","token_iin":"471860910"},"bank":null,"wallet":null,"vpa":null,"email":"discovery@example.com","contact":"+919004739000","customer_id":"cust_TXrhXepAQFpm3Q","token_id":"token_TXriCwptx38v9J","notes":{"mandate_agent_id":"","mandate_request_id":"req_incap_test"},"fee":null,"tax":null,"error_code":null,"error_description":null,"error_source":null,"error_step":null,"error_reason":null,"acquirer_data":{"auth_code":null},"created_at":1788591183}'
+        headers:
+            Cache-Control:
+                - max-age=0, must-revalidate, no-store, nocache, private
+            Connection:
+                - keep-alive
+            Content-Type:
+                - application/json
+            Date:
+                - Sat, 05 Sep 2026 06:53:10 GMT
+            Expires:
+                - Fri, 01 Jan 1990 00:00:00 GMT
+            Pragma:
+                - no-cache
+            Strict-Transport-Security:
+                - max-age=315360000; includeSubDomains
+            Uber-Trace-Id:
+                - ebf74482467996f4ba575aea01819a8e:f110e9c579d217c6:0000000000000000:1
+            Via:
+                - rws
+            X-Frame-Options:
+                - SAMEORIGIN
+            X-Pam:
+                - "0"
+            X-Xss-Protection:
+                - "0"
+        status: 200 OK
+        code: 200
+        duration: 553.062291ms
+    - id: 6
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: api.razorpay.com
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers:
+            Content-Type:
+                - application/json
+            User-Agent:
+                - razorpay-go/1.4.1
+        url: https://api.razorpay.com/v1/payments/pay_TYGNz1EWEvlMIj
+        method: GET
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        transfer_encoding:
+            - chunked
+        trailer: {}
+        content_length: -1
+        uncompressed: false
+        body: '{"id":"pay_TYGNz1EWEvlMIj","entity":"payment","amount":10000,"currency":"INR","status":"created","order_id":"order_TYGNxvKw7oPru8","invoice_id":null,"international":false,"method":"card","amount_refunded":0,"refund_status":null,"captured":false,"description":null,"card_id":"card_TXriCfk6I5xYgL","card":{"id":"card_TXriCfk6I5xYgL","entity":"card","name":"","last4":"4366","network":"Visa","type":"credit","issuer":"UTIB","international":false,"emi":true,"sub_type":"consumer","token_iin":"471860910"},"bank":null,"wallet":null,"vpa":null,"email":"discovery@example.com","contact":"+919004739000","customer_id":"cust_TXrhXepAQFpm3Q","token_id":"token_TXriCwptx38v9J","notes":{"mandate_agent_id":"","mandate_request_id":"req_incap_test"},"fee":null,"tax":null,"error_code":null,"error_description":null,"error_source":null,"error_step":null,"error_reason":null,"acquirer_data":{"auth_code":null},"created_at":1788591183}'
+        headers:
+            Cache-Control:
+                - max-age=0, must-revalidate, no-store, nocache, private
+            Connection:
+                - keep-alive
+            Content-Type:
+                - application/json
+            Date:
+                - Sat, 05 Sep 2026 06:53:12 GMT
+            Expires:
+                - Fri, 01 Jan 1990 00:00:00 GMT
+            Pragma:
+                - no-cache
+            Strict-Transport-Security:
+                - max-age=315360000; includeSubDomains
+            Uber-Trace-Id:
+                - 352931223d003cd6ee5befea1be1f57a:88ce10a1adf50822:0000000000000000:1
+            Via:
+                - rws
+            X-Frame-Options:
+                - SAMEORIGIN
+            X-Pam:
+                - "0"
+            X-Xss-Protection:
+                - "0"
+        status: 200 OK
+        code: 200
+        duration: 542.987291ms
