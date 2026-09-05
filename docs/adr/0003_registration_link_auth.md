@@ -283,3 +283,81 @@ evidence. Escalated to Razorpay support (ticket open as of 2026-09-04);
 resolution pending. This addendum will be updated once a root cause is
 confirmed, rather than the open question being silently resolved one way or
 the other in the interim.
+
+The section above is left as written — investigated live, in good faith,
+with the evidence available at the time. It is not the final answer; see
+the closing finding below.
+
+### Closing finding: explained by documentation, not a defect (2026-09-05)
+
+Both open questions above — the compact envelope's ambiguous shape, and the
+"stuck" tokens registered post-switch — are resolved by Razorpay's own
+published documentation, checked directly rather than inferred from live
+behavior alone:
+
+**The compact envelope is the documented success response, not an
+ambiguous shape.** Razorpay's own S2S recurring-payment API reference
+(*Create Subsequent Payments*, `payments/recurring-payments/cards/`,
+Section 3.2, "Create a Recurring Payment") documents the success response
+for this exact call as:
+
+```json
+{
+  "razorpay_payment_id": "pay_1Aa00000000001"
+}
+```
+
+— a bare payment ID, with no `status`, no `captured`, no error field. This
+confirms, from Razorpay's own reference rather than this project's
+inference, that a minimal envelope carrying no status information is the
+*normal, documented* shape for a successful call to this endpoint, not a
+malformed or ambiguous one this codebase had to work around. The live
+responses this project observed additionally carry `razorpay_order_id` and
+`razorpay_signature` — a superset of the documented example, not a
+contradiction of it; documentation examples are commonly trimmed for
+brevity.
+
+**Sub-₹15,000 card-mandate debits are documented to settle up to 36–72
+hours after the pre-debit notification, not immediately.** Two separate,
+directly relevant entries in Razorpay's own cards recurring-payments FAQ
+(`payments/recurring-payments/cards/faqs.md`) state this explicitly:
+
+- **Q9**, "What is the new flow to process subsequent debits using cards
+  under the new RBI guidelines?" — for debits below ₹15,000, the customer's
+  bank sends an SMS pre-debit notification, and the debit itself occurs
+  approximately 36 hours later; debits above ₹15,000 additionally require
+  Additional Factor Authentication.
+- The FAQ answering "For card mandates, how long does it take a subsequent
+  charge to move from the `created` state to the `authorized` state?"
+  states, verbatim: **"In the case of cards, the status update takes 36 to
+  72 hours."**
+
+**Every "stuck-unauthorized" result this project observed was checked well
+within that window, not after it elapsed.** `verifyCompactEnvelopeCapture`
+polls three times, 1.5 seconds apart — every determination this codebase
+ever made about a debit being "stuck" happened within roughly five seconds
+of the original call, and the manual re-checks described above ("both
+minutes and several hours later") never approached the documented 36–72
+hour window either. Every single observation of `status: "created"` this
+project made was Razorpay's payment genuinely still inside its own
+documented processing window — not a hung, broken, or silently-failed
+payment. The account-level authorization gap hypothesized above was never
+real; it was this project checking too early and, not having this
+documentation in hand yet, having no way to know that "too early" was the
+explanation.
+
+**This reframes `ErrDebitStuckUnauthorized` and
+`ErrDebitAuthorizedNotCaptured` as correctly modeling a real, multi-hour
+intermediate platform state — not working around a defect, in this
+codebase or in Razorpay's platform.** No code change follows from this
+finding: `verifyCompactEnvelopeCapture`'s three-poll, 1.5-second-interval
+window was always going to be far too short to observe a debit reach its
+genuine terminal state for a sub-₹15,000 card mandate, and correctly
+reports "not yet resolved" (via these two sentinels) rather than guessing.
+A debit reported as `ErrDebitStuckUnauthorized` shortly after being placed
+is not evidence of failure — it is evidence that Razorpay is still inside
+the 36–72 hour window it documents for exactly this call shape. The
+sentinel names remain accurate: the payment genuinely is stuck-unauthorized
+*as of the moment this codebase checked* — polling further out, on the
+order of hours rather than seconds, is a real, separate future enhancement,
+not a fix to a bug found here.
