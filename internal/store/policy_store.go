@@ -14,6 +14,14 @@ import (
 // PolicyStore defines the data access layer for policies and the debit ledger.
 type PolicyStore interface {
 	GetPolicy(ctx context.Context, policyID string) (policy.Policy, error)
+
+	// GetPolicyByAgentID resolves the one policy row belonging to agentID —
+	// the per-request lookup internal/gateway's PolicyRoundTripper performs
+	// on every write, replacing the single-policy-at-boot model. See
+	// docs/adr/0006_multi_agent_scoping.md. Satisfies policy.PolicyResolver
+	// structurally.
+	GetPolicyByAgentID(ctx context.Context, agentID string) (policy.Policy, error)
+
 	TryRecordDebit(
 		ctx context.Context,
 		req policy.DebitRequest,
@@ -73,6 +81,91 @@ func (s *PostgresPolicyStore) GetPolicy(
 	}
 
 	return p, nil
+}
+
+// GetPolicyByAgentID fetches the one policy row for agentID. The migration
+// 0005_require_policy_agent_id UNIQUE constraint on policies.agent_id is
+// what makes this deterministic — at most one row can ever match.
+func (s *PostgresPolicyStore) GetPolicyByAgentID(
+	ctx context.Context,
+	agentID string,
+) (policy.Policy, error) {
+	callCtx, cancel := context.WithTimeout(ctx, dbCallTimeout)
+	defer cancel()
+
+	var p policy.Policy
+	err := s.db.QueryRowContext(callCtx, `
+		SELECT id, agent_id, per_debit_cap_paise, cumulative_cap_paise, window_seconds, allowed_categories, expires_at, max_call_count
+		FROM policies
+		WHERE agent_id = $1
+	`, agentID).Scan(
+		&p.ID,
+		&p.AgentID,
+		&p.PerDebitCapPaise,
+		&p.CumulativeCapPaise,
+		&p.WindowSeconds,
+		pq.Array(&p.AllowedCategories),
+		&p.ExpiresAt,
+		&p.MaxCallCount,
+	)
+
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return policy.Policy{}, policy.ErrPolicyNotFound
+		}
+		return policy.Policy{}, fmt.Errorf(
+			"%w: query policy by agent_id: %v",
+			policy.ErrStoreUnavailable,
+			err,
+		)
+	}
+
+	return p, nil
+}
+
+// SavePolicy upserts a policy row — the only write path to the policies
+// table anywhere in this codebase. It exists specifically for
+// cmd/mandate-cli's confirm command; nothing in internal/policy or
+// internal/gateway ever calls it — enforcement only ever reads a policy
+// (GetPolicy/GetPolicyByAgentID), it never writes one. That asymmetry is
+// deliberate: confirm is the sole place a human's explicit confirmation is
+// required before a policy becomes active.
+//
+// Upserts on agent_id, not id. migrations/0005_require_policy_agent_id made
+// agent_id UNIQUE — every agent has at most one policy — so agent_id, not
+// the caller-chosen policy_id string, is the row's real stable identity
+// going forward. Upserting on id instead would fail here: confirming a
+// second, differently-id'd policy for an agent that already has one would
+// hit the UNIQUE(agent_id) constraint on INSERT, since ON CONFLICT (id)
+// only catches a conflict on id, never on agent_id. Upserting on agent_id
+// means re-confirming for an existing agent replaces that agent's policy —
+// including adopting the new id — rather than erroring.
+// migrations/0006_debit_ledger_fk_update_cascade added ON UPDATE CASCADE to
+// debit_ledger's policy_id foreign key specifically so that an id change
+// here carries any already-recorded debits for that agent forward to the
+// new id, rather than orphaning them or blocking the update.
+func (s *PostgresPolicyStore) SavePolicy(ctx context.Context, p policy.Policy) error {
+	callCtx, cancel := context.WithTimeout(ctx, dbCallTimeout)
+	defer cancel()
+
+	_, err := s.db.ExecContext(callCtx, `
+		INSERT INTO policies (id, agent_id, per_debit_cap_paise, cumulative_cap_paise, window_seconds, allowed_categories, expires_at, max_call_count, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+		ON CONFLICT (agent_id) DO UPDATE SET
+			id = EXCLUDED.id,
+			per_debit_cap_paise = EXCLUDED.per_debit_cap_paise,
+			cumulative_cap_paise = EXCLUDED.cumulative_cap_paise,
+			window_seconds = EXCLUDED.window_seconds,
+			allowed_categories = EXCLUDED.allowed_categories,
+			expires_at = EXCLUDED.expires_at,
+			max_call_count = EXCLUDED.max_call_count,
+			updated_at = NOW()
+	`, p.ID, p.AgentID, p.PerDebitCapPaise, p.CumulativeCapPaise,
+		p.WindowSeconds, pq.Array(p.AllowedCategories), p.ExpiresAt, p.MaxCallCount)
+	if err != nil {
+		return fmt.Errorf("%w: save policy: %v", policy.ErrStoreUnavailable, err)
+	}
+	return nil
 }
 
 var errLockFailed = errors.New("advisory lock not acquired")

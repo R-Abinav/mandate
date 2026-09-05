@@ -45,6 +45,47 @@ func (f *FakePolicyStore) GetPolicy(ctx context.Context, policyID string) (polic
 	return p, nil
 }
 
+// GetPolicyByAgentID scans the in-memory Policies map for a matching
+// AgentID, mirroring PostgresPolicyStore.GetPolicyByAgentID's contract
+// against the UNIQUE(agent_id) constraint — a test that seeds two policies
+// with the same AgentID is exercising a state the schema forbids and
+// GetPolicyByAgentID does not need to handle deterministically.
+func (f *FakePolicyStore) GetPolicyByAgentID(
+	ctx context.Context,
+	agentID string,
+) (policy.Policy, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	for _, p := range f.Policies {
+		if p.AgentID == agentID {
+			return p, nil
+		}
+	}
+	return policy.Policy{}, policy.ErrPolicyNotFound
+}
+
+// SavePolicy upserts into the in-memory Policies map — the fake's
+// equivalent of PostgresPolicyStore.SavePolicy, so cmd/mandate-cli's
+// confirm command can be tested without real Postgres. Mirrors the real
+// store's upsert-on-agent_id semantics: an existing row for the same
+// AgentID under a different key is removed first, so re-confirming for an
+// agent that already has a policy replaces it rather than leaving both
+// present under two different IDs.
+func (f *FakePolicyStore) SavePolicy(ctx context.Context, p policy.Policy) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	for existingID, existing := range f.Policies {
+		if existing.AgentID == p.AgentID && existingID != p.ID {
+			delete(f.Policies, existingID)
+			break
+		}
+	}
+	f.Policies[p.ID] = p
+	return nil
+}
+
 // TryRecordDebit simulates the atomic cap check and insert operation.
 func (f *FakePolicyStore) TryRecordDebit(
 	ctx context.Context,
