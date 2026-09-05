@@ -31,9 +31,15 @@ func TestMandateLifecycle(t *testing.T) {
 		secret = "fallback_secret"
 	}
 
-	r, err := recorder.New("cassettes/mandate_lifecycle")
+	r, err := recorder.NewWithOptions(&recorder.Options{
+		CassetteName: "cassettes/mandate_lifecycle",
+		Mode:         resolveVCRMode(),
+	})
 	if err != nil {
-		t.Fatalf("failed to start recorder: %v", err)
+		t.Fatalf(
+			"failed to start recorder in mode %v: %v (set %s=record to deliberately re-record)",
+			resolveVCRMode(), err, vcrRecordModeEnvVar,
+		)
 	}
 	defer r.Stop()
 
@@ -179,7 +185,7 @@ func TestMandateLifecycle(t *testing.T) {
 			Receipt:     "mandate-debit-req_incap_test",
 			AmountPaise: 10000, // ₹100, well under the ₹2,000 cap
 		}
-		paymentID, err := mandate.ExecuteMandateDebit(ctx, stepClient, params)
+		paymentID, err := mandate.ExecuteMandateDebit(ctx, stepClient, params, nil)
 		if err != nil {
 			t.Fatalf("expected debit success, got err: %v", err)
 		}

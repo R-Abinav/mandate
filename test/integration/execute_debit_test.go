@@ -35,7 +35,7 @@ func TestExecuteMandateDebit_SucceedsWithFetchedContactInfo(t *testing.T) {
 		AmountPaise: 10000, // ₹100 — well under the token's ₹2,000 (200000 paise) cap
 	}
 
-	paymentID, err := mandate.ExecuteMandateDebit(ctx, client, params)
+	paymentID, err := mandate.ExecuteMandateDebit(ctx, client, params, nil)
 	if err != nil {
 		t.Fatalf("expected debit success via CreateRecurringPayment with fetched contact info, got err: %v", err)
 	}

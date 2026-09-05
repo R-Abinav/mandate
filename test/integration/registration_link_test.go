@@ -20,7 +20,39 @@ import (
 	"gopkg.in/dnaeon/go-vcr.v3/recorder"
 )
 
-// newTestClient builds a go-vcr-backed razorpay client for a named cassette.
+// vcrRecordModeEnvVar is the one, explicit way to opt into live API
+// recording. Never read as a fallback or default — see resolveVCRMode.
+const vcrRecordModeEnvVar = "VCR_RECORD_MODE"
+
+// resolveVCRMode returns recorder.ModeRecordOnly only when
+// VCR_RECORD_MODE=record is set explicitly, and recorder.ModeReplayOnly
+// otherwise — including when the env var is unset. ModeReplayOnly fails
+// loudly and immediately (cassette.ErrCassetteNotFound or
+// cassette.ErrInteractionNotFound) on any cache miss, rather than the
+// go-vcr default (recorder.New's implicit ModeRecordOnce) silently falling
+// through to a real live API call whenever a cassette file happens to be
+// missing.
+//
+// That silent fallback is exactly what caused an unintended live debit
+// attempt on 2026-09-05: a cassette deliberately deleted for reflecting a
+// broken, non-representative token result was regenerated — with a fresh,
+// real, non-representative result all over again — by nothing more than an
+// ordinary `go test -tags=integration ./...` run. ModeReplayOnly makes that
+// class of accident structurally impossible: a missing cassette is now a
+// test failure, never a network call.
+//
+// To deliberately re-record a cassette (e.g. for the end-to-end rehearsal),
+// run with VCR_RECORD_MODE=record explicitly set — there is no other way
+// to reach a live API call through this helper.
+func resolveVCRMode() recorder.Mode {
+	if os.Getenv(vcrRecordModeEnvVar) == "record" {
+		return recorder.ModeRecordOnly
+	}
+	return recorder.ModeReplayOnly
+}
+
+// newTestClient builds a go-vcr-backed razorpay client for a named
+// cassette, in resolveVCRMode()'s mode — replay-only by default.
 func newTestClient(t *testing.T, cassetteName string) (*razorpay.Client, func()) {
 	t.Helper()
 
@@ -32,9 +64,15 @@ func newTestClient(t *testing.T, cassetteName string) (*razorpay.Client, func())
 		secret = "fallback_secret"
 	}
 
-	r, err := recorder.New("cassettes/" + cassetteName)
+	r, err := recorder.NewWithOptions(&recorder.Options{
+		CassetteName: "cassettes/" + cassetteName,
+		Mode:         resolveVCRMode(),
+	})
 	if err != nil {
-		t.Fatalf("failed to start recorder for cassette %q: %v", cassetteName, err)
+		t.Fatalf(
+			"failed to start recorder for cassette %q in mode %v: %v (set %s=record to deliberately re-record)",
+			cassetteName, resolveVCRMode(), err, vcrRecordModeEnvVar,
+		)
 	}
 
 	// Redact credentials from saved cassette interactions.

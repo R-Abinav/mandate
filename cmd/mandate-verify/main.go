@@ -12,6 +12,7 @@ import (
 
 	"github.com/R-Abinav/mandate/internal/audit"
 	"github.com/R-Abinav/mandate/internal/config"
+	_ "github.com/lib/pq"
 )
 
 func main() {
