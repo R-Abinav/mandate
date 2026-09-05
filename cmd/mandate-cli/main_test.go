@@ -141,6 +141,67 @@ func TestConfirmCommand_AlreadyConsumedProposal_NeverWritesTwice(t *testing.T) {
 	}
 }
 
+// TestConfirmCommand_ErrorsAreUnwrappable confirms all three of
+// confirmCommand's proposal-lookup-failure branches now wrap the exact
+// sentinel they detected via errors.Is, rather than discarding it into a
+// fresh, unwrapped fmt.Errorf. Before this fix, a caller of confirmCommand
+// itself could not tell "not found" apart from "expired" apart from
+// "already consumed" without parsing the message text — even though the
+// function's own switch statement clearly knew the distinction internally.
+func TestConfirmCommand_ErrorsAreUnwrappable(t *testing.T) {
+	policies := store.NewFakePolicyStore()
+
+	t.Run("not_found", func(t *testing.T) {
+		proposals := store.NewFakeProposalStore()
+		var out bytes.Buffer
+		err := confirmCommand(context.Background(), &out, proposals, policies, "prop_missing")
+		if !errors.Is(err, store.ErrProposalNotFound) {
+			t.Fatalf("expected errors.Is(err, store.ErrProposalNotFound), got: %v", err)
+		}
+	})
+
+	t.Run("expired", func(t *testing.T) {
+		proposals := store.NewFakeProposalStore()
+		sp := validStoredProposal("prop_expired_unwrap")
+		sp.ProposalExpiresAt = time.Now().Add(-1 * time.Minute)
+		if err := proposals.SaveProposal(context.Background(), sp); err != nil {
+			t.Fatalf("failed to seed proposal: %v", err)
+		}
+		var out bytes.Buffer
+		err := confirmCommand(
+			context.Background(),
+			&out,
+			proposals,
+			policies,
+			"prop_expired_unwrap",
+		)
+		if !errors.Is(err, store.ErrProposalExpired) {
+			t.Fatalf("expected errors.Is(err, store.ErrProposalExpired), got: %v", err)
+		}
+	})
+
+	t.Run("already_consumed", func(t *testing.T) {
+		proposals := store.NewFakeProposalStore()
+		sp := validStoredProposal("prop_consumed_unwrap")
+		consumedAt := time.Now().Add(-1 * time.Minute)
+		sp.ConsumedAt = &consumedAt
+		if err := proposals.SaveProposal(context.Background(), sp); err != nil {
+			t.Fatalf("failed to seed proposal: %v", err)
+		}
+		var out bytes.Buffer
+		err := confirmCommand(
+			context.Background(),
+			&out,
+			proposals,
+			policies,
+			"prop_consumed_unwrap",
+		)
+		if !errors.Is(err, store.ErrProposalAlreadyConsumed) {
+			t.Fatalf("expected errors.Is(err, store.ErrProposalAlreadyConsumed), got: %v", err)
+		}
+	})
+}
+
 // TestConfirmCommand_InvalidStoredProposal_FailsRevalidation covers defense
 // in depth: even if a row somehow ended up in the proposals table with
 // values that shouldn't have passed the original ValidateForActivation call

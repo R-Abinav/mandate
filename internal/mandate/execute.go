@@ -43,12 +43,12 @@ func createDebitOrder(client *razorpay.Client, amount int64, receipt string) (st
 
 	rawID, ok := body["id"]
 	if !ok {
-		return "", fmt.Errorf("missing order id in response")
+		return "", fmt.Errorf("%w: missing order id in response", ErrMalformedRazorpayResponse)
 	}
 
 	orderID, ok := rawID.(string)
 	if !ok {
-		return "", fmt.Errorf("order id is not string")
+		return "", fmt.Errorf("%w: order id is not string", ErrMalformedRazorpayResponse)
 	}
 
 	return orderID, nil
@@ -253,12 +253,13 @@ func classifyDebitResponse(
 	// Payment.Fetch to determine the real, current state before trusting it.
 	rawPaymentID, ok := parsed["razorpay_payment_id"]
 	if !ok {
-		return "", fmt.Errorf("invalid razorpay response: missing or malformed payment id")
+		return "", fmt.Errorf("%w: missing or malformed payment id", ErrMalformedRazorpayResponse)
 	}
 	paymentID, ok := rawPaymentID.(string)
 	if !ok || paymentID == "" {
 		return "", fmt.Errorf(
-			"invalid razorpay response: razorpay_payment_id is not a non-empty string, got %T",
+			"%w: razorpay_payment_id is not a non-empty string, got %T",
+			ErrMalformedRazorpayResponse,
 			rawPaymentID,
 		)
 	}
@@ -280,7 +281,7 @@ func extractPaymentID(parsed map[string]interface{}) (string, error) {
 			return pid, nil
 		}
 	}
-	return "", fmt.Errorf("invalid razorpay response: missing or malformed payment id")
+	return "", fmt.Errorf("%w: missing or malformed payment id", ErrMalformedRazorpayResponse)
 }
 
 // verifyCompactEnvelopeCapture polls client.Payment.Fetch to determine the
@@ -394,20 +395,32 @@ func fetchCustomerContactAndEmail(
 
 	rawContact, ok := body["contact"]
 	if !ok {
-		return "", "", fmt.Errorf("customer response missing 'contact' field")
+		return "", "", fmt.Errorf(
+			"%w: customer response missing 'contact' field",
+			ErrMalformedRazorpayResponse,
+		)
 	}
 	contactStr, ok := rawContact.(string)
 	if !ok {
-		return "", "", fmt.Errorf("customer 'contact' is not a string, got %T", rawContact)
+		return "", "", fmt.Errorf(
+			"%w: customer 'contact' is not a string, got %T",
+			ErrMalformedRazorpayResponse, rawContact,
+		)
 	}
 
 	rawEmail, ok := body["email"]
 	if !ok {
-		return "", "", fmt.Errorf("customer response missing 'email' field")
+		return "", "", fmt.Errorf(
+			"%w: customer response missing 'email' field",
+			ErrMalformedRazorpayResponse,
+		)
 	}
 	emailStr, ok := rawEmail.(string)
 	if !ok {
-		return "", "", fmt.Errorf("customer 'email' is not a string, got %T", rawEmail)
+		return "", "", fmt.Errorf(
+			"%w: customer 'email' is not a string, got %T",
+			ErrMalformedRazorpayResponse, rawEmail,
+		)
 	}
 
 	return contactStr, emailStr, nil

@@ -40,12 +40,16 @@ func CreateMandateOrder(
 
 	rawID, ok := body["id"]
 	if !ok {
-		return "", fmt.Errorf("invalid razorpay response: missing 'id' field")
+		return "", fmt.Errorf("%w: missing 'id' field", ErrMalformedRazorpayResponse)
 	}
 
 	orderID, ok := rawID.(string)
 	if !ok {
-		return "", fmt.Errorf("invalid razorpay response: 'id' is not a string, got %T", rawID)
+		return "", fmt.Errorf(
+			"%w: 'id' is not a string, got %T",
+			ErrMalformedRazorpayResponse,
+			rawID,
+		)
 	}
 
 	return orderID, nil

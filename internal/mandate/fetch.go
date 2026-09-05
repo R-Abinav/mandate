@@ -31,12 +31,13 @@ func FetchTokenStatus(
 func ParseTokenStatus(tok map[string]interface{}) (string, error) {
 	rawStatus, ok := tok["status"]
 	if !ok {
-		return "", fmt.Errorf("invalid razorpay response: missing 'status' field")
+		return "", fmt.Errorf("%w: missing 'status' field", ErrMalformedRazorpayResponse)
 	}
 	statusStr, ok := rawStatus.(string)
 	if !ok {
 		return "", fmt.Errorf(
-			"invalid razorpay response: 'status' is not a string, got %T",
+			"%w: 'status' is not a string, got %T",
+			ErrMalformedRazorpayResponse,
 			rawStatus,
 		)
 	}

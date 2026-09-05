@@ -71,13 +71,14 @@ func CreateRegistrationLink(
 	rawShortURL, ok := body["short_url"]
 	if !ok {
 		return "", "", "", fmt.Errorf(
-			"invalid razorpay response: missing 'short_url' field",
+			"%w: missing 'short_url' field", ErrMalformedRazorpayResponse,
 		)
 	}
 	shortURLStr, ok := rawShortURL.(string)
 	if !ok {
 		return "", "", "", fmt.Errorf(
-			"invalid razorpay response: 'short_url' is not a string, got %T",
+			"%w: 'short_url' is not a string, got %T",
+			ErrMalformedRazorpayResponse,
 			rawShortURL,
 		)
 	}
@@ -86,13 +87,13 @@ func CreateRegistrationLink(
 	rawID, ok := body["id"]
 	if !ok {
 		return "", "", "", fmt.Errorf(
-			"invalid razorpay response: missing 'id' field",
+			"%w: missing 'id' field", ErrMalformedRazorpayResponse,
 		)
 	}
 	idStr, ok := rawID.(string)
 	if !ok {
 		return "", "", "", fmt.Errorf(
-			"invalid razorpay response: 'id' is not a string, got %T", rawID,
+			"%w: 'id' is not a string, got %T", ErrMalformedRazorpayResponse, rawID,
 		)
 	}
 
@@ -137,7 +138,7 @@ func FetchSavedPaymentMethods(
 	rawSlice, ok := rawItems.([]interface{})
 	if !ok {
 		return nil, fmt.Errorf(
-			"invalid razorpay response: 'items' is not a list, got %T", rawItems,
+			"%w: 'items' is not a list, got %T", ErrMalformedRazorpayResponse, rawItems,
 		)
 	}
 
@@ -146,8 +147,8 @@ func FetchSavedPaymentMethods(
 		t, ok := item.(map[string]interface{})
 		if !ok {
 			return nil, fmt.Errorf(
-				"invalid razorpay response: items[%d] is not an object, got %T",
-				i, item,
+				"%w: items[%d] is not an object, got %T",
+				ErrMalformedRazorpayResponse, i, item,
 			)
 		}
 		tokens = append(tokens, t)

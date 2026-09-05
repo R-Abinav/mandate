@@ -70,6 +70,16 @@ var (
 	ErrDebitStuckUnauthorized = errors.New(
 		"debit stuck unauthorized: razorpay accepted the request but never authorized the payment",
 	)
+
+	// ErrMalformedRazorpayResponse indicates a Razorpay API response was
+	// missing an expected field, or had a field of the wrong type — a
+	// shape mismatch, not a business rejection. Applied uniformly across
+	// create.go/fetch.go/register.go/execute.go's response-parsing checks
+	// so a caller can tell "Razorpay sent something we can't parse" apart
+	// from a network failure or a business rejection (ErrRazorpayRejected,
+	// ErrDebitMaxAmountExceeded, etc.) via errors.Is, instead of only by
+	// free-text message.
+	ErrMalformedRazorpayResponse = errors.New("malformed razorpay response")
 )
 
 // ErrNetworkFailure represents a transport-level network failure, cleanly separating

@@ -158,6 +158,9 @@ func TestExecuteMandateDebit_FailsClosedWhenCustomerContactMissing(t *testing.T)
 	if err == nil {
 		t.Fatal("expected an error when customer response is missing 'contact', got nil")
 	}
+	if !errors.Is(err, ErrMalformedRazorpayResponse) {
+		t.Fatalf("expected errors.Is(err, ErrMalformedRazorpayResponse) to hold, got: %v", err)
+	}
 	if !strings.Contains(err.Error(), "customer contact details") {
 		t.Fatalf("expected a clear 'customer contact details' error, got: %v", err)
 	}
