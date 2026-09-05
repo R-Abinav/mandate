@@ -87,12 +87,13 @@ func runPropose(args []string) error {
 	// The provider selected by LLM_PROVIDER (anthropic or google) is the
 	// only one whose key is checked — swapping providers must not require
 	// both API keys to be present.
-	llm, err := policy.NewLLMClient(
-		context.Background(),
-		cfg.LLMProvider,
-		cfg.AnthropicAPIKey,
-		cfg.GeminiAPIKey,
-	)
+	llm, err := policy.NewLLMClient(context.Background(), policy.LLMConfig{
+		Provider:        cfg.LLMProvider,
+		AnthropicAPIKey: cfg.AnthropicAPIKey,
+		AnthropicModel:  cfg.AnthropicModel,
+		GeminiAPIKey:    cfg.GeminiAPIKey,
+		GeminiModel:     cfg.GeminiModel,
+	})
 	if err != nil {
 		return fmt.Errorf("mandate-cli: %w", err)
 	}

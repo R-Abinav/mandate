@@ -15,7 +15,9 @@ type Env struct {
 	RazorpayKeyID                 string
 	RazorpayKeySecret             string
 	AnthropicAPIKey               string
+	AnthropicModel                string
 	GeminiAPIKey                  string
+	GeminiModel                   string
 	LLMProvider                   string
 	DatabaseURL                   string
 	DatabaseURLTest               string
@@ -63,7 +65,9 @@ func Load() Env {
 		RazorpayKeyID:              os.Getenv("RAZORPAY_KEY_ID"),
 		RazorpayKeySecret:          os.Getenv("RAZORPAY_KEY_SECRET"),
 		AnthropicAPIKey:            os.Getenv("ANTHROPIC_API_KEY"),
+		AnthropicModel:             os.Getenv("ANTHROPIC_MODEL"),
 		GeminiAPIKey:               os.Getenv("GEMINI_API_KEY"),
+		GeminiModel:                os.Getenv("GEMINI_MODEL"),
 		LLMProvider:                os.Getenv("LLM_PROVIDER"),
 		DatabaseURL:                os.Getenv("DATABASE_URL"),
 		DatabaseURLTest:            os.Getenv("DATABASE_URL_TEST"),

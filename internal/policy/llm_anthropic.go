@@ -22,13 +22,22 @@ type AnthropicClient struct {
 	HTTPClient *http.Client
 }
 
-// NewAnthropicClient constructs a client with sensible defaults. Model
-// defaults to a fast, cheap model — this call is a structured single-turn
+// defaultAnthropicModel is used when model is empty — a fast, cheap model
+// deliberately chosen because this call is a structured single-turn
 // extraction, not a task needing a large context window or deep reasoning.
-func NewAnthropicClient(apiKey string) *AnthropicClient {
+const defaultAnthropicModel = "claude-haiku-4-5-20251001"
+
+// NewAnthropicClient constructs a client. model overrides the default
+// (ANTHROPIC_MODEL in .env, threaded through by NewLLMClient) — an empty
+// string falls back to defaultAnthropicModel, never an empty Model field
+// silently sent to the API.
+func NewAnthropicClient(apiKey, model string) *AnthropicClient {
+	if model == "" {
+		model = defaultAnthropicModel
+	}
 	return &AnthropicClient{
 		APIKey:     apiKey,
-		Model:      "claude-haiku-4-5-20251001",
+		Model:      model,
 		HTTPClient: &http.Client{Timeout: 20 * time.Second},
 	}
 }

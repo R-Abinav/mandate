@@ -17,12 +17,22 @@ type GeminiClient struct {
 	Model  string
 }
 
-// NewGeminiClient constructs a client with sensible defaults. Model defaults
-// to a fast, cheap model — same rationale as NewAnthropicClient: this call
-// is a structured single-turn extraction, not a task needing deep reasoning.
-func NewGeminiClient(ctx context.Context, apiKey string) (*GeminiClient, error) {
+// defaultGeminiModel is used when model is empty. gemini-2.5-flash was the
+// original choice here but was confirmed live (2026-09-05) to have been
+// deprecated — Google's own API error named gemini-3.6-flash as the direct
+// replacement, cited verbatim rather than guessed at.
+const defaultGeminiModel = "gemini-3.6-flash"
+
+// NewGeminiClient constructs a client. model overrides the default
+// (GEMINI_MODEL in .env, threaded through by NewLLMClient) — an empty
+// string falls back to defaultGeminiModel, never an empty Model field
+// silently sent to the API.
+func NewGeminiClient(ctx context.Context, apiKey, model string) (*GeminiClient, error) {
 	if apiKey == "" {
 		return nil, fmt.Errorf("gemini: API key not set")
+	}
+	if model == "" {
+		model = defaultGeminiModel
 	}
 	client, err := genai.NewClient(ctx, &genai.ClientConfig{
 		APIKey:  apiKey,
@@ -31,7 +41,7 @@ func NewGeminiClient(ctx context.Context, apiKey string) (*GeminiClient, error) 
 	if err != nil {
 		return nil, fmt.Errorf("gemini: failed to construct client: %w", err)
 	}
-	return &GeminiClient{client: client, Model: "gemini-2.5-flash"}, nil
+	return &GeminiClient{client: client, Model: model}, nil
 }
 
 // Complete sends prompt as a single-turn generation request and returns the
