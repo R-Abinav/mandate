@@ -106,13 +106,20 @@ mandate-verify
 
 ## Documentation
 
-- `AGENTS.md`, build, test, and lint commands, and conventions for any agent working in this repository.
-- `docs/ARCHITECTURE.md`, system diagrams and a summary of what each package owns.
-- `docs/THREAT_MODEL.md`, what this project protects against and what it explicitly does not.
-- `docs/PERFORMANCE.md`, the full latency benchmark and the real historical concurrency numbers.
-- `docs/VERIFIED_POINTERS.md`, the sourced RBI regulatory citation this project's premise rests on.
-- `docs/MANUAL_TEST_STEPS.md`, the one part of the test suite that requires a human in a browser, and why.
-- `docs/adr/`, every architecture decision record, in order, with the reasoning and the live evidence behind each one.
+- [`AGENTS.md`](AGENTS.md), build, test, and lint commands, and conventions for any agent working in this repository.
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), system diagrams and a summary of what each package owns.
+- [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md), what this project protects against and what it explicitly does not.
+- [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md), the full latency benchmark and the real historical concurrency numbers.
+- [`docs/VERIFIED_POINTERS.md`](docs/VERIFIED_POINTERS.md), the sourced RBI regulatory citation this project's premise rests on.
+- [`docs/MANUAL_TEST_STEPS.md`](docs/MANUAL_TEST_STEPS.md), the one part of the test suite that requires a human in a browser, and why.
+- [`docs/adr/`](docs/adr/), every architecture decision record, in order, with the reasoning and the live evidence behind each one:
+  - [`0001_cumulative_cap_ledger_vs_counter.md`](docs/adr/0001_cumulative_cap_ledger_vs_counter.md)
+  - [`0002_idempotency_locking_and_error_semantics.md`](docs/adr/0002_idempotency_locking_and_error_semantics.md)
+  - [`0003_registration_link_auth.md`](docs/adr/0003_registration_link_auth.md)
+  - [`0004_transport_layer_gateway.md`](docs/adr/0004_transport_layer_gateway.md)
+  - [`0005_audit_trail.md`](docs/adr/0005_audit_trail.md)
+  - [`0006_multi_agent_scoping.md`](docs/adr/0006_multi_agent_scoping.md)
+  - [`0007_mcp_composition.md`](docs/adr/0007_mcp_composition.md)
 
 ## License
 
