@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 )
 
 // Store is the persistence dependency chain.go's LogIntent/LogOutcome/
@@ -61,12 +62,65 @@ func NewPostgresStore(db *sql.DB) *PostgresStore {
 // that both use pg_try_advisory_xact_lock as the underlying primitive.
 const auditChainLockKey = "audit_chain"
 
-// Append reads the current chain tail and inserts the new entry inside a
-// single transaction, guarded by a dedicated advisory lock — never the
-// policy evaluation's lock, never the policy evaluation's transaction. This
+// appendRetryDelays is the exact bounded backoff schedule
+// store.PostgresPolicyStore.TryRecordDebit already uses for its own
+// advisory lock (ADR-0002 Decision 2) — reused verbatim here, not
+// reinvented, so the two locks in this codebase that use
+// pg_try_advisory_xact_lock behave identically under contention.
+var appendRetryDelays = []time.Duration{
+	10 * time.Millisecond,
+	20 * time.Millisecond,
+	40 * time.Millisecond,
+	80 * time.Millisecond,
+	160 * time.Millisecond,
+}
+
+// Append reads the current chain tail and inserts the new entry, retrying
+// with bounded backoff on lock contention exactly the way TryRecordDebit
+// already does for the per-policy lock — see docs/adr/0005_audit_trail.md's
+// updated Consequences entry for why a single global chain lock is
+// inherently more contended than a per-policy one (hash-chain ordering
+// requires serializing every writer against one key), and why graceful
+// retry, not eliminating the contention, is the fix. Before this, a single
+// failed non-blocking acquire attempt surfaced immediately as
+// ErrChainLocked, which RoundTrip's fail-closed handling turned into a 503
+// for what may otherwise have been an allowed request — confirmed live:
+// at just 2 concurrent agents (test/integration/multi_agent_load_test.go's
+// demo-scale scenario), roughly 39% of attempts hit at least one such 503
+// before this fix.
+func (s *PostgresStore) Append(
+	ctx context.Context,
+	build func(prevHash string) (Entry, error),
+) (Entry, error) {
+	for attempt := 0; attempt <= len(appendRetryDelays); attempt++ {
+		entry, err := s.appendOnce(ctx, build)
+		if errors.Is(err, ErrChainLocked) {
+			if attempt < len(appendRetryDelays) {
+				select {
+				case <-ctx.Done():
+					return Entry{}, fmt.Errorf(
+						"audit: context canceled during chain lock retry: %w",
+						ctx.Err(),
+					)
+				case <-time.After(appendRetryDelays[attempt]):
+					continue
+				}
+			}
+			return Entry{}, ErrChainLocked
+		}
+		return entry, err
+	}
+
+	return Entry{}, ErrChainLocked
+}
+
+// appendOnce is the single non-blocking-acquire attempt Append retries:
+// reads the current chain tail and inserts the new entry inside one
+// transaction, guarded by a dedicated advisory lock — never the policy
+// evaluation's lock, never the policy evaluation's transaction. This
 // transaction only ever touches audit_log; like ADR-0002's invariant for
 // the policy lock, it must never wrap a network call.
-func (s *PostgresStore) Append(
+func (s *PostgresStore) appendOnce(
 	ctx context.Context,
 	build func(prevHash string) (Entry, error),
 ) (Entry, error) {

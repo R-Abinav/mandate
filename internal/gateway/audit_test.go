@@ -108,8 +108,10 @@ func TestPolicyRoundTripper_AuditNeverRunsInsidePolicyLockTransaction(t *testing
 	}
 
 	pol := newTestPolicy()
+	fakeResolver := store.NewFakePolicyStore()
+	fakeResolver.Policies[pol.ID] = pol
 	rt := &PolicyRoundTripper{
-		Policy:     pol,
+		Resolver:   fakeResolver,
 		Store:      lockStore,
 		AuditStore: observer,
 		Next:       http.DefaultTransport,
@@ -117,7 +119,7 @@ func TestPolicyRoundTripper_AuditNeverRunsInsidePolicyLockTransaction(t *testing
 	client := &http.Client{Transport: rt}
 
 	body := []byte(
-		`{"amount":10000,"currency":"INR","order_id":"order_x","token":"token_x","recurring":true,"notes":{"mandate_request_id":"req_txn_boundary"}}`,
+		`{"amount":10000,"currency":"INR","order_id":"order_x","token":"token_x","recurring":true,"notes":{"mandate_request_id":"req_txn_boundary","mandate_agent_id":"agent_test"}}`,
 	)
 	req, err := http.NewRequest(
 		http.MethodPost,
@@ -211,7 +213,7 @@ func TestPolicyRoundTripper_DenialLogging_403ProducesOneDeniedEntry(t *testing.T
 	auditStore := audit.NewFakeStore()
 
 	rt := &PolicyRoundTripper{
-		Policy:     pol,
+		Resolver:   fakePolicyStore,
 		Store:      fakePolicyStore,
 		AuditStore: auditStore,
 		Next:       http.DefaultTransport,
@@ -221,7 +223,7 @@ func TestPolicyRoundTripper_DenialLogging_403ProducesOneDeniedEntry(t *testing.T
 	const requestID = "req_denial_403"
 	// AmountPaise exceeds PerDebitCapPaise (50000) — denied purely in-memory.
 	body := []byte(
-		`{"amount":300000,"currency":"INR","order_id":"order_x","token":"token_x","recurring":true,"notes":{"mandate_request_id":"` + requestID + `"}}`,
+		`{"amount":300000,"currency":"INR","order_id":"order_x","token":"token_x","recurring":true,"notes":{"mandate_request_id":"` + requestID + `","mandate_agent_id":"agent_test"}}`,
 	)
 	req, err := http.NewRequest(
 		http.MethodPost,
@@ -252,10 +254,12 @@ func TestPolicyRoundTripper_DenialLogging_503ProducesOneSystemErrorEntry(t *test
 	defer upstream.Close()
 
 	pol := newTestPolicy()
+	fakeResolver := store.NewFakePolicyStore()
+	fakeResolver.Policies[pol.ID] = pol
 	auditStore := audit.NewFakeStore()
 
 	rt := &PolicyRoundTripper{
-		Policy:     pol,
+		Resolver:   fakeResolver,
 		Store:      &erroringStore{err: policy.ErrStoreUnavailable},
 		AuditStore: auditStore,
 		Next:       http.DefaultTransport,
@@ -264,7 +268,7 @@ func TestPolicyRoundTripper_DenialLogging_503ProducesOneSystemErrorEntry(t *test
 
 	const requestID = "req_denial_503"
 	body := []byte(
-		`{"amount":10000,"currency":"INR","order_id":"order_x","token":"token_x","recurring":true,"notes":{"mandate_request_id":"` + requestID + `"}}`,
+		`{"amount":10000,"currency":"INR","order_id":"order_x","token":"token_x","recurring":true,"notes":{"mandate_request_id":"` + requestID + `","mandate_agent_id":"agent_test"}}`,
 	)
 	req, err := http.NewRequest(
 		http.MethodPost,
@@ -305,7 +309,7 @@ func TestPolicyRoundTripper_LogIntentFailure_FailsClosed(t *testing.T) {
 	fakePolicyStore.Policies[pol.ID] = pol
 
 	rt := &PolicyRoundTripper{
-		Policy:     pol,
+		Resolver:   fakePolicyStore,
 		Store:      fakePolicyStore,
 		AuditStore: &erroringAuditStore{err: errors.New("audit store unreachable")},
 		Next:       http.DefaultTransport,
@@ -314,7 +318,7 @@ func TestPolicyRoundTripper_LogIntentFailure_FailsClosed(t *testing.T) {
 
 	// In-cap amount — this request would otherwise be allowed and forwarded.
 	body := []byte(
-		`{"amount":10000,"currency":"INR","order_id":"order_x","token":"token_x","recurring":true,"notes":{"mandate_request_id":"req_intent_fail"}}`,
+		`{"amount":10000,"currency":"INR","order_id":"order_x","token":"token_x","recurring":true,"notes":{"mandate_request_id":"req_intent_fail","mandate_agent_id":"agent_test"}}`,
 	)
 	req, err := http.NewRequest(
 		http.MethodPost,

@@ -120,6 +120,56 @@ deliberate 20ms window on every `TryRecordDebit` call; a wrapping audit
 store records whether that flag was still set at the instant any `Append`
 ran. The test asserts it never was.
 
+### Lock contention and retry (added post-Phase 6)
+
+This ADR originally flagged, in its Consequences table, that `Append`'s
+advisory lock serializes every writer against one fixed key and called it
+"not expected to be a bottleneck at this system's scale... but a real
+property of the design, not assumed away." Phase 6's multi-agent load test
+(`test/integration/multi_agent_load_test.go`) confirmed it is not free: at
+just 2 concurrent agents — the actual Phase 8 demo scenario, not a
+stress-test scale — 35 of 90 debit attempts (39%) hit at least one 503
+caused by `ErrChainLocked` before this fix, because `Append`'s original
+single non-blocking `pg_try_advisory_xact_lock` attempt returned
+`ErrChainLocked` immediately on the first missed acquire, with no retry of
+its own. `RoundTrip`'s fail-closed handling then turned that into a 503 for
+what may otherwise have been an allowed request.
+
+**Why a single global chain lock is inherently more contended than a
+per-policy one — expected, not a bug.** The per-policy advisory lock
+(ADR-0001/ADR-0002) has one key *per policy*, so N policies spread
+contention across N locks; two agents debiting concurrently don't compete
+with each other at all at that layer. The audit chain has exactly one key,
+by construction: appending an entry means reading the current tail hash and
+inserting the next link, and that ordering guarantee — the entire reason
+this is a hash chain and not just a table of independent rows — requires
+every writer, regardless of which policy or agent it's acting for, to
+serialize against every other writer. There is no way to shard this lock by
+policy or agent without breaking the single, total order the chain's
+tamper-evidence property depends on. More concurrent policy activity always
+means more contention on this one lock; that is the chain's nature, not a
+defect introduced by an unrelated feature.
+
+**The fix: the same bounded retry-with-backoff `TryRecordDebit` already
+has, applied here too, not a different or larger one.** `Append` now
+retries a failed acquire attempt through the exact same delay schedule
+(10/20/40/80/160ms, ADR-0002 Decision 2) `TryRecordDebit` already uses for
+the per-policy lock, via a new `appendOnce`/`Append` split identical in
+shape to `tryRecordDebitOnce`/`TryRecordDebit`. This is graceful handling
+of expected contention, not an attempt to eliminate the bottleneck itself —
+the underlying single-key serialization is unchanged and, per the
+reasoning above, cannot be removed without changing what a hash chain
+means. `internal/audit/store_lock_retry_test.go` proves the fix directly: 20
+fully-synchronized concurrent `Append` calls (comfortably beyond the actual
+2-agent demo scale) all succeed with zero `ErrChainLocked` surfaced to any
+caller — while also documenting, honestly, that this schedule is the same
+one already known to need an *additional* client-level retry at extreme
+scale (`internal/store/policy_store_concurrency_test.go`'s 500-goroutine
+test needs exactly that on top of the store's own internal retry). Fixing
+graceful handling doesn't change that ceiling; it moves where ordinary,
+demo-scale contention gets absorbed from "immediately surfaced to the
+caller" to "resolved internally, transparently."
+
 ### Best-effort logging, stated explicitly
 
 An audit write failure (`LogIntent`, `LogOutcome`, or `LogResolved`
@@ -163,4 +213,4 @@ a chain that still verifies — this attack is not caught.
 | **Positive** | A crash between intent and outcome is a queryable, visible state (`UnresolvedIntents`), not silent data loss or a false success. |
 | **Positive** | Proven, not asserted: a dynamic test demonstrates audit logging never executes inside the policy advisory-lock transaction, the same discipline ADR-0002 established for the network call itself. |
 | **Negative** | Audit logging is best-effort — a `LogIntent`/`LogOutcome`/`LogResolved` failure is logged and swallowed, not surfaced to the caller or retried. An audit-store outage produces gaps in the trail rather than blocking traffic; this trade-off is deliberate but does mean the trail's completeness isn't itself guaranteed under an audit-store outage. |
-| **Negative** | `PostgresStore.Append`'s advisory lock serializes all writers against one fixed key — every gateway process writing to the same audit log contends for the same lock on every entry. Not expected to be a bottleneck at this system's scale (one insert per decision), but a real property of the design, not assumed away. |
+| **Negative** | `PostgresStore.Append`'s advisory lock serializes all writers against one fixed key — every gateway process writing to the same audit log contends for the same lock on every entry. Confirmed as a real bottleneck, not just a theoretical one, by Phase 6's multi-agent load test (39% of attempts hit a contention-caused 503 at just 2 concurrent agents). Inherent to a single hash chain's ordering guarantee, not fixable by sharding the lock — see "Lock contention and retry" above. Mitigated by giving `Append` the same bounded retry-with-backoff `TryRecordDebit` already has (ADR-0002 Decision 2), which absorbs ordinary demo-scale contention internally; the underlying single-key serialization, and its accepted ceiling at extreme scale, remain unchanged. |
