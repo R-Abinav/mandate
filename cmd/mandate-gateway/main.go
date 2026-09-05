@@ -1,17 +1,26 @@
 // Command mandate-gateway is the transport-layer enforcement process. It
 // constructs the razorpay-go SDK client with a PolicyRoundTripper installed
-// as its HTTPClient.Transport, so every outbound write call from every
-// internal/mandate function is gated through the policy engine before it
-// reaches Razorpay's network.
+// as its HTTPClient.Transport, so every outbound write call — whether
+// issued by the official razorpay-mcp-server toolset or mandate's own
+// mandate_execute_debit tool, both composed in internal/mcpserver — is
+// gated through the policy engine before it reaches Razorpay's network.
+// Serves that composed toolset over stdio (docs/adr/0007_mcp_composition.md).
 package main
 
 import (
+	"context"
+	"fmt"
+	"io"
 	"log/slog"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/R-Abinav/mandate/internal/config"
 	"github.com/R-Abinav/mandate/internal/gateway"
 	"github.com/R-Abinav/mandate/internal/logging"
+	"github.com/R-Abinav/mandate/internal/mcpserver"
+	"github.com/razorpay/razorpay-mcp-server/pkg/mcpgo"
 )
 
 func main() {
@@ -34,7 +43,9 @@ func run(cfg config.Env, logger *slog.Logger) error {
 	// the single-policy-at-boot model this process used through Phase 5.
 	// There is no longer one Policy value loaded here: PolicyRoundTripper
 	// now resolves a policy per request, keyed by the agent_id carried in
-	// notes.mandate_agent_id on the wire.
+	// notes.mandate_agent_id on the wire (or, absent that, BootAgentID —
+	// see docs/adr/0007_mcp_composition.md's "boot-time agent identity"
+	// section).
 	//
 	// MANDATE_POLICY_ID is gone, not repurposed as a fallback/default
 	// policy for a request with no resolvable agent_id: internal/policy's
@@ -48,7 +59,7 @@ func run(cfg config.Env, logger *slog.Logger) error {
 	// gateway.NewGatedClient — the single source of truth for it, so
 	// nothing else needing this same wiring (e.g. a rehearsal driver)
 	// duplicates it by hand.
-	_, db, _, err := gateway.NewGatedClient(cfg, logger)
+	client, db, auditStore, err := gateway.NewGatedClient(cfg, logger)
 	if err != nil {
 		return err
 	}
@@ -56,8 +67,28 @@ func run(cfg config.Env, logger *slog.Logger) error {
 
 	logger.Info("mandate-gateway: configured — resolving policies per request by agent_id")
 
-	// Wiring only, for this phase: client is fully gated and ready. Future
-	// phases attach the actual serving surface (MCP tools, audit logging)
-	// that will make write calls through it.
-	return nil
+	srv := mcpserver.New(client, auditStore, cfg.MandateAgentID)
+
+	stdioSrv, err := mcpgo.NewStdioServer(srv)
+	if err != nil {
+		return fmt.Errorf("mandate-gateway: failed to build stdio server: %w", err)
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	errC := make(chan error, 1)
+	go func() {
+		errC <- stdioSrv.Listen(ctx, io.Reader(os.Stdin), io.Writer(os.Stdout))
+	}()
+
+	logger.Info("mandate-gateway: mcp server listening on stdio")
+
+	select {
+	case <-ctx.Done():
+		logger.Info("mandate-gateway: shutting down")
+		return nil
+	case err := <-errC:
+		return err
+	}
 }
