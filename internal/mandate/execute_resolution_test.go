@@ -173,3 +173,43 @@ func TestExecuteMandateDebit_ResolutionEntry_Captured(t *testing.T) {
 	}
 	assertResolutionEntry(t, entries, params.RequestID, resolutionCaptured)
 }
+
+// TestLogDebitResolution_AlwaysSetsCategory confirms logDebitResolution's
+// payload carries Category="debit_execution" regardless of reason or
+// which fields DebitParams itself happens to have set — this function has
+// exactly one caller (verifyCompactEnvelopeCapture, on the debit_execution
+// path) and exactly one possible category, hardcoded rather than left to
+// whatever DebitParams happened to carry.
+func TestLogDebitResolution_AlwaysSetsCategory(t *testing.T) {
+	for _, reason := range []string{
+		resolutionCaptured,
+		resolutionAuthorizedNotCaptured,
+		resolutionStuckUnauthorized,
+	} {
+		t.Run(reason, func(t *testing.T) {
+			auditStore := audit.NewFakeStore()
+			params := DebitParams{
+				RequestID:   "req_category_check_" + reason,
+				AgentID:     "agent_category_check",
+				AmountPaise: 100,
+			}
+
+			logDebitResolution(context.Background(), auditStore, params, reason)
+
+			entries, err := auditStore.All(context.Background())
+			if err != nil {
+				t.Fatalf("failed to read audit entries: %v", err)
+			}
+			if len(entries) != 1 {
+				t.Fatalf("expected exactly 1 entry, got %d", len(entries))
+			}
+			if entries[0].Payload.Category != "debit_execution" {
+				t.Fatalf(
+					"expected category %q, got %q",
+					"debit_execution",
+					entries[0].Payload.Category,
+				)
+			}
+		})
+	}
+}

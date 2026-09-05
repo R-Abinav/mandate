@@ -372,8 +372,13 @@ func logDebitResolution(
 		return
 	}
 	_, _ = audit.LogResolution(ctx, auditStore, audit.Payload{
-		RequestID:   params.RequestID,
-		AgentID:     params.AgentID,
+		RequestID: params.RequestID,
+		AgentID:   params.AgentID,
+		// Hardcoded, not parameterized: this function is only ever called
+		// from verifyCompactEnvelopeCapture, on the debit_execution path —
+		// there is no other caller and no other category a resolution
+		// entry from this function could represent.
+		Category:    "debit_execution",
 		AmountPaise: params.AmountPaise,
 		Decision:    audit.DecisionAllowed,
 		Reason:      reason,

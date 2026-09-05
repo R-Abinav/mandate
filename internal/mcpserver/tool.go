@@ -28,13 +28,25 @@ const mandateExecuteDebitToolName = "mandate_execute_debit"
 // mandate_agent_id is an optional parameter, not required: a calling MCP
 // client that has no notion of "agent identity" to set (unlike
 // internal/mandate's CLI/HTTP callers, which set notes.mandate_agent_id
-// directly) can omit it entirely and rely on bootAgentID — the same
-// MANDATE_AGENT_ID boot-time fallback internal/gateway.PolicyRoundTripper
-// already implements for exactly this reason. When present, it is
-// forwarded into DebitParams.AgentID exactly like any other caller, so a
-// client that *can* identify itself per call still takes precedence over
-// the boot fallback, unchanged from PolicyRoundTripper's existing
-// wire-value-wins behavior.
+// directly) can omit it entirely and fall back to bootAgentID.
+//
+// That fallback is resolved here, by this handler, via
+// resolveDebitAgentID — not left to PolicyRoundTripper's own
+// BootAgentID fallback at the transport layer. Both would reach the same
+// effective value, but resolving it here first means DebitParams.AgentID
+// (and therefore notes.mandate_agent_id on the wire, and
+// logDebitResolution's resolution-entry payload, which has no visibility
+// into PolicyRoundTripper's later fallback) carries the real effective
+// agent identity from the start, rather than an empty value the
+// transport layer silently backfills only for its own decision. A wire
+// value, when present, still always wins over bootAgentID — unchanged
+// from PolicyRoundTripper's existing precedence. If neither is
+// available, this handler rejects immediately, before ExecuteMandateDebit
+// ever runs — no FetchTokenStatus, no order creation, no customer
+// lookup — since a debit with no resolvable agent identity is denied at
+// the gate regardless; failing here first avoids spending three real
+// Razorpay network round-trips on a call that cannot succeed, and reports
+// a specific, actionable error instead of the gate's generic denial.
 func newMandateExecuteDebitTool(
 	client *razorpaygo.Client,
 	auditStore audit.Store,
@@ -103,7 +115,12 @@ func newMandateExecuteDebitTool(
 		if err != nil {
 			return mcpgo.NewToolResultError(err.Error()), nil
 		}
-		agentID := optionalString(args, "mandate_agent_id")
+		agentID, err := resolveDebitAgentID(optionalString(args, "mandate_agent_id"), bootAgentID)
+		if err != nil {
+			return mcpgo.NewToolResultError(
+				fmt.Sprintf("mandate_execute_debit: %s", err.Error()),
+			), nil
+		}
 
 		params := mandate.DebitParams{
 			TokenID:     tokenID,
@@ -149,6 +166,30 @@ func newMandateExecuteDebitTool(
 }
 
 var errMissingArgument = errors.New("missing required argument")
+
+// errNoAgentIdentity is returned when a debit call carries no
+// wire-supplied mandate_agent_id and no MANDATE_AGENT_ID was configured
+// at boot — there is no identity to attribute this debit to, and this
+// handler rejects it immediately rather than letting ExecuteMandateDebit
+// run partway before PolicyRoundTripper denies it downstream.
+var errNoAgentIdentity = errors.New(
+	"no agent identity available: set mandate_agent_id on this call or MANDATE_AGENT_ID at boot",
+)
+
+// resolveDebitAgentID applies the same wire-value-wins fallback
+// PolicyRoundTripper.BootAgentID implements at the transport layer, one
+// step earlier: wireAgentID, when non-empty, always wins; bootAgentID is
+// used only when the wire carried none. Returns errNoAgentIdentity if
+// both are empty.
+func resolveDebitAgentID(wireAgentID, bootAgentID string) (string, error) {
+	if wireAgentID != "" {
+		return wireAgentID, nil
+	}
+	if bootAgentID != "" {
+		return bootAgentID, nil
+	}
+	return "", errNoAgentIdentity
+}
 
 func requiredString(args map[string]interface{}, key string) (string, error) {
 	raw, ok := args[key]

@@ -157,7 +157,14 @@ codebase otherwise keeps deliberately clean (`internal/mandate` knows
 nothing about policies, agents being resolved, or `internal/gateway` at
 all). `payload.RequestID` is what threads a resolution entry back to its
 intent/outcome pair instead — sufficient, since `request_id` is already the
-caller-supplied idempotency key unique to this logical attempt.
+caller-supplied idempotency key unique to this logical attempt. The same
+join recovers a resolution entry's full policy-layer context, too:
+`internal/mandate` deliberately never learns `policy_id` (threading it down
+would break the same mandate/gateway separation `intent_id` above already
+argues for), so `policy_id` — and, for any caller of `ExecuteMandateDebit`
+that leaves `DebitParams.AgentID` unset — `agent_id`, is read from the
+intent/outcome pair sharing that `request_id`, not duplicated onto the
+resolution entry itself.
 
 Deliberately scoped narrowly, not generalized: only the compact-envelope
 path gets a resolution entry. The full-entity uncaptured path
