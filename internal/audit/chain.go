@@ -95,6 +95,50 @@ func LogOutcome(
 	})
 }
 
+// LogResolution records the true, out-of-band-determined final state of an
+// already-allowed request whose recorded outcome (LogOutcome's
+// outcomeReason) does not itself reflect what actually happened —
+// currently written only by internal/mandate.ExecuteMandateDebit, for a
+// compact-envelope debit_execution response: the initial call's own
+// "http_200" is real, but says nothing about whether the payment actually
+// captured, which only Payment.Fetch polling (read_only, correctly
+// unaudited) determines. payload.Decision must be DecisionAllowed — the
+// same decision the original intent/outcome pair already recorded; a
+// resolution entry clarifies an allowed request's true outcome, it is
+// never itself a new policy verdict.
+//
+// Unlike LogOutcome, this does not reference an intent_id: the caller
+// (internal/mandate) has no visibility into the audit entry IDs
+// internal/gateway's PolicyRoundTripper assigned for its own request —
+// threading that through would mean crossing a package boundary this
+// codebase otherwise keeps deliberately clean (internal/mandate knows
+// nothing about internal/gateway or policy resolution). payload.RequestID
+// is what threads a resolution entry back to its intent/outcome pair.
+func LogResolution(ctx context.Context, store Store, payload Payload) (Entry, error) {
+	if payload.Decision != DecisionAllowed {
+		return Entry{}, fmt.Errorf(
+			"audit: LogResolution requires Decision=%q, got %q",
+			DecisionAllowed, payload.Decision,
+		)
+	}
+	if payload.Timestamp.IsZero() {
+		payload.Timestamp = time.Now()
+	}
+
+	return store.Append(ctx, func(prevHash string) (Entry, error) {
+		hash, err := ComputeHash(prevHash, payload)
+		if err != nil {
+			return Entry{}, err
+		}
+		return Entry{
+			EntryType: EntryTypeResolution,
+			PrevHash:  prevHash,
+			Payload:   payload,
+			Hash:      hash,
+		}, nil
+	})
+}
+
 // LogResolved records a single, already-complete entry for a request that
 // never left the process — a policy denial or a system error. There is no
 // intent phase: nothing about a synthetic 403/503 response is pending, so

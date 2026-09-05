@@ -25,7 +25,7 @@ const (
 	DecisionSystemError = "system_error"
 )
 
-// EntryType distinguishes the three shapes a row in the chain can take.
+// EntryType distinguishes the four shapes a row in the chain can take.
 type EntryType string
 
 const (
@@ -43,6 +43,20 @@ const (
 	// phase for a request that never left the process: nothing about it is
 	// pending, so there is nothing that can be left unresolved by a crash.
 	EntryTypeResolved EntryType = "resolved"
+
+	// EntryTypeResolution is written once an already-allowed request
+	// (already carrying an intent/outcome pair) reaches a true final state
+	// that RoundTrip itself cannot observe — added 2026-09-05 after a live
+	// rehearsal found the gap firsthand, not a state anticipated in
+	// advance. LogOutcome's outcomeReason (e.g. "http_200") reflects only
+	// the immediate HTTP response to a debit_execution call; for a
+	// compact-envelope response, whether the payment actually captured is
+	// determined only by separate Payment.Fetch polling — polling that is,
+	// correctly, itself never audited (each poll is read_only, and polling
+	// is not a policy decision). EntryTypeResolution is how that
+	// out-of-band-determined truth still reaches the audit trail. See
+	// docs/adr/0005_audit_trail.md's "Resolution stage" section.
+	EntryTypeResolution EntryType = "resolution"
 )
 
 // Payload is the JSON body hashed into every Entry. Every entry — intent,

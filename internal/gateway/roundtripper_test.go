@@ -191,6 +191,69 @@ func TestPolicyRoundTripper_ReadOnly_AlwaysForwards(t *testing.T) {
 	}
 }
 
+// TestPolicyRoundTripper_OrderCreation_AlwaysForwards confirms POST
+// /v1/orders bypasses policy entirely, exactly like a GET — the mock
+// upstream DOES receive this request (unlike
+// TestPolicyRoundTripper_UnrecognizedWrite_DeniedByDefault below, where it
+// must not). This is the exact call internal/mandate's createDebitOrder
+// makes before every recurring-payment debit; a policy-gated client
+// denying it outright as an unrecognized write was a real, live-confirmed
+// bug (2026-09-05) that broke every debit attempt before it ever reached
+// the call policy.Evaluate is meant to gate.
+func TestPolicyRoundTripper_OrderCreation_AlwaysForwards(t *testing.T) {
+	upstreamCalled := 0
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		upstreamCalled++
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer upstream.Close()
+
+	fakeStore := store.NewFakePolicyStore()
+	// Deliberately empty AllowedCategories — would deny any write category,
+	// same as TestPolicyRoundTripper_ReadOnly_AlwaysForwards — proving
+	// order_creation truly never reaches policy.Evaluate at all.
+	pol := policy.Policy{
+		ID:                 "policy_test",
+		AgentID:            "agent_test",
+		PerDebitCapPaise:   1,
+		CumulativeCapPaise: 1,
+		WindowSeconds:      86400,
+		AllowedCategories:  []string{},
+		ExpiresAt:          time.Now().Add(24 * time.Hour),
+		MaxCallCount:       1,
+	}
+	fakeStore.Policies[pol.ID] = pol
+
+	rt := &PolicyRoundTripper{Resolver: fakeStore, Store: fakeStore, Next: http.DefaultTransport}
+	client := &http.Client{Transport: rt}
+
+	body := []byte(`{"amount":10000,"currency":"INR","receipt":"mandate-debit-req_x"}`)
+	req, err := http.NewRequest(
+		http.MethodPost,
+		upstream.URL+orderCreationPath,
+		bytes.NewReader(body),
+	)
+	if err != nil {
+		t.Fatalf("failed to build request: %v", err)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("unexpected transport error: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if upstreamCalled != 1 {
+		t.Fatalf(
+			"expected order_creation to reach upstream exactly once, got %d calls",
+			upstreamCalled,
+		)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 from upstream, got %d", resp.StatusCode)
+	}
+}
+
 // TestPolicyRoundTripper_UnrecognizedWrite_DeniedByDefault confirms an
 // unknown write path is denied without ever consulting the store.
 func TestPolicyRoundTripper_UnrecognizedWrite_DeniedByDefault(t *testing.T) {

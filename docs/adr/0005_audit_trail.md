@@ -91,6 +91,88 @@ gap for a crash to land in. Giving a denial a fake "intent" phase would
 manufacture a distinction that doesn't exist and complicate
 `UnresolvedIntents`'s meaning for no benefit.
 
+### Resolution stage — a third entry type, added 2026-09-05
+
+The intent/outcome split above was designed, and tested, against the
+assumption that "the real HTTP response to the write call" and "what
+actually happened" are the same fact. For `registration` and most
+`debit_execution` responses that assumption holds. It does not hold for a
+**compact-envelope** `debit_execution` response (`razorpay_payment_id`/
+`razorpay_order_id`/`razorpay_signature`, no `status` field on the
+immediate response) — `internal/mandate.ExecuteMandateDebit` already knew
+this and already handled it correctly at the business-logic layer,
+polling `Payment.Fetch` up to three times via `verifyCompactEnvelopeCapture`
+to determine whether the payment actually captured, stayed
+authorized-but-uncaptured, or never progressed past `"created"`. What
+nothing handled, until a live end-to-end rehearsal found it firsthand, is
+that **the audit trail never saw the result of that polling at all.**
+
+This was not a gap anyone anticipated and deferred — it's worth stating
+plainly, not glossed over as always-planned. The intent/outcome model was
+believed complete. It took an actual rehearsal — propose a policy, confirm
+it, run a real debit through the real gated stack — to produce a case where
+`LogOutcome`'s `outcomeReason` (`"http_200"`, entirely accurate about the
+immediate HTTP response) and the debit's true final state
+(`ErrDebitStuckUnauthorized`, entirely accurate about what
+`ExecuteMandateDebit` actually observed) diverged, live, in the same audit
+chain, with nothing connecting them. Read only the audit trail for that
+request and the conclusion is "allowed, succeeded." Read `ExecuteMandateDebit`'s
+own return value and the conclusion is "failed, never authorized." Both
+were true statements about different things; only one was visible where
+anyone would look for it.
+
+**Why two stages were insufficient for this call shape, specifically:**
+`PolicyRoundTripper.RoundTrip` calls `LogOutcome` exactly once, immediately
+after `Next.RoundTrip(req)` returns for the initial write call — and that
+is the *only* moment `RoundTrip` is ever involved in this request's
+lifecycle. `Payment.Fetch` is a separate, later, independent HTTP
+round-trip, one `RoundTrip` does see (it passes through it, since GETs are
+`read_only`) but has no way to associate with the debit that came before
+it — nothing on a `GET /v1/payments/{id}` says "this is a follow-up poll
+for request X." Worse, gating those polls would be wrong for an unrelated
+reason (ADR-0004): they move no money and must never be denied, so
+`read_only` correctly, deliberately, never touches the audit log either.
+`RoundTrip` structurally cannot know the true outcome of out-of-band
+polling that happens entirely outside any single request it mediates.
+
+**The fix:** a third entry type, `EntryTypeResolution`, written by a new
+`audit.LogResolution` function — called not by `internal/gateway` (which
+cannot see the polling) but by `internal/mandate.ExecuteMandateDebit`
+itself (which performs it), at the exact three points
+`verifyCompactEnvelopeCapture` determines a final state: `captured`,
+`authorized_not_captured`, or `stuck_unauthorized` — the same three states
+`execute.go`'s own sentinel errors (`ErrDebitAuthorizedNotCaptured`,
+`ErrDebitStuckUnauthorized`, and the plain success case) already
+distinguish, not new vocabulary invented for the audit trail. This required
+`internal/mandate` to depend on `internal/audit` for the first time —
+checked for a cycle before assuming it was safe: `internal/audit` has zero
+dependency on any other package in this module, so the new edge is clean,
+one-directional, and adds no cycle.
+
+A resolution entry does **not** reference an `intent_id` the way an outcome
+entry does. `internal/mandate` has no visibility into the audit entry IDs
+`PolicyRoundTripper` assigned for its own request — threading that through
+would mean passing gateway-internal state across a package boundary this
+codebase otherwise keeps deliberately clean (`internal/mandate` knows
+nothing about policies, agents being resolved, or `internal/gateway` at
+all). `payload.RequestID` is what threads a resolution entry back to its
+intent/outcome pair instead — sufficient, since `request_id` is already the
+caller-supplied idempotency key unique to this logical attempt.
+
+Deliberately scoped narrowly, not generalized: only the compact-envelope
+path gets a resolution entry. The full-entity uncaptured path
+(`ErrDebitNotCaptured`) and the OTP-required path
+(`ErrDebitRequiresOTP`) are both resolved directly from the *initial*
+response — `LogOutcome`'s `"http_200"` is not misleading for either of
+those, because nothing further needs to be polled to know the outcome. And
+within the compact-envelope path itself, only the three *determined* final
+states get an entry — a `Payment.Fetch` transport error or a context
+cancellation mid-poll is a "we don't know" system failure, not one of the
+three states this stage exists to record, and gets none. Individual poll
+attempts are never logged, only the final resolved state once known — a
+resolution entry is not a transcript of the polling, it is the polling's
+verdict.
+
 ### Transaction boundary
 
 `Store.Append` (the only write path) takes no transaction handle from its
@@ -214,3 +296,4 @@ a chain that still verifies — this attack is not caught.
 | **Positive** | Proven, not asserted: a dynamic test demonstrates audit logging never executes inside the policy advisory-lock transaction, the same discipline ADR-0002 established for the network call itself. |
 | **Negative** | Audit logging is best-effort — a `LogIntent`/`LogOutcome`/`LogResolved` failure is logged and swallowed, not surfaced to the caller or retried. An audit-store outage produces gaps in the trail rather than blocking traffic; this trade-off is deliberate but does mean the trail's completeness isn't itself guaranteed under an audit-store outage. |
 | **Negative** | `PostgresStore.Append`'s advisory lock serializes all writers against one fixed key — every gateway process writing to the same audit log contends for the same lock on every entry. Confirmed as a real bottleneck, not just a theoretical one, by Phase 6's multi-agent load test (39% of attempts hit a contention-caused 503 at just 2 concurrent agents). Inherent to a single hash chain's ordering guarantee, not fixable by sharding the lock — see "Lock contention and retry" above. Mitigated by giving `Append` the same bounded retry-with-backoff `TryRecordDebit` already has (ADR-0002 Decision 2), which absorbs ordinary demo-scale contention internally; the underlying single-key serialization, and its accepted ceiling at extreme scale, remain unchanged. |
+| **Fixed (2026-09-05), found live, not anticipated** | The original two-stage intent/outcome model could not represent a compact-envelope `debit_execution` response's true outcome — `LogOutcome`'s `"http_200"` reflects only the initial HTTP response, while the actual capture/authorization state is determined by separate `Payment.Fetch` polling `PolicyRoundTripper` has no visibility into. A live rehearsal produced exactly this divergence (audit trail said "allowed, http_200"; the real debit was stuck unauthorized) before it was fixed. `EntryTypeResolution`/`LogResolution`, called from `internal/mandate.ExecuteMandateDebit` itself rather than the gateway, closes the gap — see "Resolution stage" above. |

@@ -96,6 +96,23 @@ func (p *PolicyRoundTripper) RoundTrip(req *http.Request) (*http.Response, error
 		return p.next().RoundTrip(req)
 	}
 
+	// order_creation forwards unconditionally, exactly like read_only, but
+	// gets its own one-line log entry rather than sharing read_only's
+	// silence — a GET and an inert money-staging POST are different things
+	// being let through for different reasons, and that distinction should
+	// be visible in the logs, not collapsed. Not a policy decision, so no
+	// audit-chain entry: logDecision/logResolved exist for outcomes
+	// policy.Evaluate actually produced, and this call never reaches
+	// Evaluate at all. See docs/adr/0004_transport_layer_gateway.md's
+	// "Order creation: a fourth passthrough category" section.
+	if category == CategoryOrderCreation {
+		p.logger().Printf(
+			"mandate-gateway order_creation: passthrough, no monetary risk method=%s path=%s",
+			req.Method, req.URL.Path,
+		)
+		return p.next().RoundTrip(req)
+	}
+
 	// Prefer the caller's real idempotency key (notes.mandate_request_id —
 	// both known categories send it, per Classify's doc comment). The
 	// content hash is a last-resort fallback, not the default: a genuine

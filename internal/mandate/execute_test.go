@@ -115,7 +115,7 @@ func TestExecuteMandateDebit_FailsClosedWhenCustomerFetchErrors(t *testing.T) {
 		AmountPaise: 10000,
 	}
 
-	_, err := ExecuteMandateDebit(context.Background(), client, params)
+	_, err := ExecuteMandateDebit(context.Background(), client, params, nil)
 	if err == nil {
 		t.Fatal("expected an error when Customer.Fetch fails, got nil")
 	}
@@ -154,7 +154,7 @@ func TestExecuteMandateDebit_FailsClosedWhenCustomerContactMissing(t *testing.T)
 		AmountPaise: 10000,
 	}
 
-	_, err := ExecuteMandateDebit(context.Background(), client, params)
+	_, err := ExecuteMandateDebit(context.Background(), client, params, nil)
 	if err == nil {
 		t.Fatal("expected an error when customer response is missing 'contact', got nil")
 	}
@@ -206,7 +206,7 @@ func TestExecuteMandateDebit_FailsClosedWhenPaymentNotCaptured(t *testing.T) {
 		AmountPaise: 300000,
 	}
 
-	paymentID, err := ExecuteMandateDebit(context.Background(), client, params)
+	paymentID, err := ExecuteMandateDebit(context.Background(), client, params, nil)
 	if err == nil {
 		t.Fatalf("expected ErrDebitNotCaptured, got success with payment_id=%s", paymentID)
 	}
@@ -245,7 +245,7 @@ func TestExecuteMandateDebit_CompactEnvelope_CapturedImmediately_NoOverPoll(t *t
 	}
 
 	paymentID, err := ExecuteMandateDebit(
-		context.Background(), client, debitParamsForCompactEnvelopeTests("req_compact_1"),
+		context.Background(), client, debitParamsForCompactEnvelopeTests("req_compact_1"), nil,
 	)
 	if err != nil {
 		t.Fatalf("expected success, got err: %v", err)
@@ -310,6 +310,8 @@ func TestVerifyCompactEnvelopeCapture_StuckCreated_AllRetries(t *testing.T) {
 		client,
 		"pay_mock123",
 		testPollInterval,
+		DebitParams{},
+		nil,
 	)
 	elapsed := time.Since(start)
 
@@ -354,6 +356,8 @@ func TestVerifyCompactEnvelopeCapture_AuthorizedNotCaptured_AllRetries(t *testin
 		client,
 		"pay_mock123",
 		testPollInterval,
+		DebitParams{},
+		nil,
 	)
 	if !errors.Is(err, ErrDebitAuthorizedNotCaptured) {
 		t.Fatalf("expected ErrDebitAuthorizedNotCaptured, got: %v", err)
@@ -383,6 +387,8 @@ func TestVerifyCompactEnvelopeCapture_RecoversOnThirdAttempt(t *testing.T) {
 		client,
 		"pay_mock123",
 		testPollInterval,
+		DebitParams{},
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("expected success on third attempt, got err: %v", err)
@@ -413,6 +419,8 @@ func TestVerifyCompactEnvelopeCapture_FetchTransportErrorPropagates(t *testing.T
 		client,
 		"pay_mock123",
 		testPollInterval,
+		DebitParams{},
+		nil,
 	)
 	elapsed := time.Since(start)
 
@@ -462,7 +470,14 @@ func TestVerifyCompactEnvelopeCapture_ContextCancelledMidRetry(t *testing.T) {
 	}()
 
 	start := time.Now()
-	_, err := verifyCompactEnvelopeCapture(ctx, client, "pay_mock123", longPollInterval)
+	_, err := verifyCompactEnvelopeCapture(
+		ctx,
+		client,
+		"pay_mock123",
+		longPollInterval,
+		DebitParams{},
+		nil,
+	)
 	elapsed := time.Since(start)
 
 	if err == nil {
