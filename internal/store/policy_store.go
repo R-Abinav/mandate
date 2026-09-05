@@ -77,7 +77,7 @@ func (s *PostgresPolicyStore) GetPolicy(
 		if errors.Is(err, sql.ErrNoRows) {
 			return policy.Policy{}, policy.ErrPolicyNotFound
 		}
-		return policy.Policy{}, fmt.Errorf("%w: query policy: %v", policy.ErrStoreUnavailable, err)
+		return policy.Policy{}, fmt.Errorf("%w: query policy: %w", policy.ErrStoreUnavailable, err)
 	}
 
 	return p, nil
@@ -114,7 +114,7 @@ func (s *PostgresPolicyStore) GetPolicyByAgentID(
 			return policy.Policy{}, policy.ErrPolicyNotFound
 		}
 		return policy.Policy{}, fmt.Errorf(
-			"%w: query policy by agent_id: %v",
+			"%w: query policy by agent_id: %w",
 			policy.ErrStoreUnavailable,
 			err,
 		)
@@ -163,7 +163,7 @@ func (s *PostgresPolicyStore) SavePolicy(ctx context.Context, p policy.Policy) e
 	`, p.ID, p.AgentID, p.PerDebitCapPaise, p.CumulativeCapPaise,
 		p.WindowSeconds, pq.Array(p.AllowedCategories), p.ExpiresAt, p.MaxCallCount)
 	if err != nil {
-		return fmt.Errorf("%w: save policy: %v", policy.ErrStoreUnavailable, err)
+		return fmt.Errorf("%w: save policy: %w", policy.ErrStoreUnavailable, err)
 	}
 	return nil
 }
@@ -200,7 +200,7 @@ func (s *PostgresPolicyStore) TryRecordDebit(
 				select {
 				case <-ctx.Done():
 					return policy.Decision{}, fmt.Errorf(
-						"%w: context canceled during lock retry: %v",
+						"%w: context canceled during lock retry: %w",
 						policy.ErrStoreUnavailable,
 						ctx.Err(),
 					)
@@ -236,7 +236,7 @@ func (s *PostgresPolicyStore) tryRecordDebitOnce(
 	// Begin transaction
 	tx, err := s.db.BeginTx(callCtx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 	if err != nil {
-		return policy.Decision{}, fmt.Errorf("%w: begin tx: %v", policy.ErrStoreUnavailable, err)
+		return policy.Decision{}, fmt.Errorf("%w: begin tx: %w", policy.ErrStoreUnavailable, err)
 	}
 	defer func() { _ = tx.Rollback() }() // Safe to call even if already committed
 
@@ -246,7 +246,7 @@ func (s *PostgresPolicyStore) tryRecordDebitOnce(
 		Scan(&locked)
 	if err != nil {
 		return policy.Decision{}, fmt.Errorf(
-			"%w: acquire lock: %v",
+			"%w: acquire lock: %w",
 			policy.ErrStoreUnavailable,
 			err,
 		)
@@ -269,7 +269,7 @@ func (s *PostgresPolicyStore) tryRecordDebitOnce(
 	`, req.PolicyID, windowSeconds, req.RequestID).Scan(&windowSpent, &windowCount)
 	if err != nil {
 		return policy.Decision{}, fmt.Errorf(
-			"%w: compute totals: %v",
+			"%w: compute totals: %w",
 			policy.ErrStoreUnavailable,
 			err,
 		)
@@ -318,7 +318,7 @@ func (s *PostgresPolicyStore) tryRecordDebitOnce(
 			}, nil
 		}
 		return policy.Decision{}, fmt.Errorf(
-			"%w: insert debit: %v",
+			"%w: insert debit: %w",
 			policy.ErrStoreUnavailable,
 			err,
 		)
@@ -326,7 +326,7 @@ func (s *PostgresPolicyStore) tryRecordDebitOnce(
 
 	// Commit transaction
 	if err := tx.Commit(); err != nil {
-		return policy.Decision{}, fmt.Errorf("%w: commit tx: %v", policy.ErrStoreUnavailable, err)
+		return policy.Decision{}, fmt.Errorf("%w: commit tx: %w", policy.ErrStoreUnavailable, err)
 	}
 
 	return policy.Decision{

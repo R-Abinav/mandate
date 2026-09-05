@@ -98,7 +98,7 @@ func (s *PostgresProposalStore) SaveProposal(ctx context.Context, p StoredPropos
 		p.Policy.CumulativeCapPaise, p.Policy.WindowSeconds, pq.Array(p.Policy.AllowedCategories),
 		p.Policy.ExpiresAt, p.Policy.MaxCallCount, p.Echo, p.RawText, p.ProposalExpiresAt)
 	if err != nil {
-		return fmt.Errorf("%w: save proposal: %v", policy.ErrStoreUnavailable, err)
+		return fmt.Errorf("%w: save proposal: %w", policy.ErrStoreUnavailable, err)
 	}
 	return nil
 }
@@ -128,7 +128,7 @@ func (s *PostgresProposalStore) GetProposal(
 		if errors.Is(err, sql.ErrNoRows) {
 			return StoredProposal{}, ErrProposalNotFound
 		}
-		return StoredProposal{}, fmt.Errorf("%w: get proposal: %v", policy.ErrStoreUnavailable, err)
+		return StoredProposal{}, fmt.Errorf("%w: get proposal: %w", policy.ErrStoreUnavailable, err)
 	}
 	if agentID.Valid {
 		p.Policy.AgentID = agentID.String
@@ -153,7 +153,7 @@ func (s *PostgresProposalStore) MarkConsumed(ctx context.Context, proposalID str
 		UPDATE policy_proposals SET consumed_at = NOW() WHERE id = $1
 	`, proposalID)
 	if err != nil {
-		return fmt.Errorf("%w: mark proposal consumed: %v", policy.ErrStoreUnavailable, err)
+		return fmt.Errorf("%w: mark proposal consumed: %w", policy.ErrStoreUnavailable, err)
 	}
 	return nil
 }
