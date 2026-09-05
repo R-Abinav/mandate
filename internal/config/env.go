@@ -14,6 +14,9 @@ import (
 type Env struct {
 	RazorpayKeyID                 string
 	RazorpayKeySecret             string
+	AnthropicAPIKey               string
+	GeminiAPIKey                  string
+	LLMProvider                   string
 	DatabaseURL                   string
 	DatabaseURLTest               string
 	DatabaseMaxOpenConnections    int
@@ -59,6 +62,9 @@ func Load() Env {
 	return Env{
 		RazorpayKeyID:              os.Getenv("RAZORPAY_KEY_ID"),
 		RazorpayKeySecret:          os.Getenv("RAZORPAY_KEY_SECRET"),
+		AnthropicAPIKey:            os.Getenv("ANTHROPIC_API_KEY"),
+		GeminiAPIKey:               os.Getenv("GEMINI_API_KEY"),
+		LLMProvider:                os.Getenv("LLM_PROVIDER"),
 		DatabaseURL:                os.Getenv("DATABASE_URL"),
 		DatabaseURLTest:            os.Getenv("DATABASE_URL_TEST"),
 		DatabaseMaxOpenConnections: parseInt(os.Getenv("DATABASE_MAX_OPEN_CONNECTIONS"), 25),
