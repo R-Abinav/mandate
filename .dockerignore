@@ -1,0 +1,33 @@
+# Version control — never needed inside the build context.
+.git
+.gitignore
+
+# Throwaway investigation scripts (see CLAUDE session history) — never
+# committed, but excluded here too in case one exists locally when a build
+# runs.
+.rehearsal-scratch/
+
+# Integration test fixtures: only used by `go test -tags=integration`,
+# never by a compiled binary at runtime.
+test/integration/cassettes/
+
+# Everything below mirrors .gitignore — kept in sync deliberately, not
+# re-derived independently, since anything not committed has no business
+# being copied into a build context either.
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+coverage.*
+*.coverprofile
+profile.cov
+go.work
+go.work.sum
+.env
+.vscode/
+.claude/
+order.json
+/mandate-*

@@ -1,26 +1,122 @@
-version: '3.8'
-
 services:
-  gateway:
-    image: alpine:latest
-    container_name: gateway
-    env_file:
-      - .env
-    command: ["sh", "-c", "echo 'Gateway service placeholder running...'; sleep infinity"]
-    ports:
-      - "8080:8080"
-      
-  test-db:
+  # The project's Postgres 16 service — same image, credentials, database
+  # name, and healthcheck as the original scaffold's "test-db" service.
+  # Named and containerized distinctly from the real, long-running
+  # mandate_test_db container this machine already runs natively (the one
+  # DATABASE_URL/DATABASE_URL_TEST actually point at) — mandate-postgres-docker
+  # can never collide with or affect it, structurally: no shared container
+  # name, and no host port binding at all, so there's nothing to conflict
+  # on port 5432 either. Other services on this compose network reach it
+  # by its service name, not a published host port.
+  mandate-postgres-docker:
     image: postgres:16-alpine
-    container_name: mandate_test_db
+    container_name: mandate-postgres-docker
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=password
       - POSTGRES_DB=mandate_test
-    ports:
-      - "5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d mandate_test"]
       interval: 2s
       timeout: 5s
       retries: 10
+
+  # Applies every migration in migrations/, in order, against the
+  # mandate-postgres-docker service above, then exits. Uses golang-migrate's
+  # own official image — no custom build, no vendored migrate binary.
+  # DATABASE_URL here is deliberately NOT read from .env: .env's
+  # DATABASE_URL points at localhost, for native (non-containerized) runs,
+  # whereas containers on this compose network reach Postgres via the
+  # service name "mandate-postgres-docker".
+  migrate:
+    image: migrate/migrate:v4.17.1
+    depends_on:
+      mandate-postgres-docker:
+        condition: service_healthy
+    volumes:
+      - ./migrations:/migrations:ro
+    command:
+      - "-path=/migrations"
+      - "-database=postgres://postgres:password@mandate-postgres-docker:5432/mandate_test?sslmode=disable"
+      - "up"
+    restart: "no"
+
+  # mandate-verify: standalone audit hash-chain verifier. Used here as a
+  # bounded connectivity check — it opens DATABASE_URL, pings it, and walks
+  # whatever's in audit_log (an empty, freshly-migrated table verifies
+  # trivially as "0 entries, chain intact"). Exiting 0 is a real,
+  # meaningful signal that a container built from this Dockerfile can talk
+  # to the compose Postgres over the network, not just at build time.
+  mandate-verify:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: mandate:latest
+    container_name: mandate-verify
+    env_file:
+      - .env
+    environment:
+      # Overrides .env's localhost-oriented DATABASE_URL for the same
+      # reason the migrate service above doesn't read it from .env either.
+      - DATABASE_URL=postgres://postgres:password@mandate-postgres-docker:5432/mandate_test?sslmode=disable
+    depends_on:
+      mandate-postgres-docker:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    entrypoint: ["/app/mandate-verify"]
+
+  # mandate-cli: the propose/confirm policy CLI. Built into the same image;
+  # needs a subcommand and arguments to do anything, so it isn't exercised
+  # by the bounded connectivity test above, but is defined here so it's
+  # reachable via `docker compose run --rm mandate-cli <args>`.
+  mandate-cli:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: mandate:latest
+    container_name: mandate-cli
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgres://postgres:password@mandate-postgres-docker:5432/mandate_test?sslmode=disable
+    depends_on:
+      mandate-postgres-docker:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    entrypoint: ["/app/mandate-cli"]
+    profiles: ["tools"]
+
+  # mandate-gateway: the transport-layer enforcement process — and also
+  # the binary that serves the composed MCP toolset (fetch_tokens,
+  # mandate_execute_debit, mandate_create_registration_link) over stdio.
+  # There is no separate MCP-server binary; this is it.
+  #
+  # mandate-gateway speaks JSON-RPC over stdin/stdout — `docker compose up`
+  # attaches no stdin at all, so a real MCP client can never reach it that
+  # way. To exercise the MCP stdio flow containerized, use:
+  #   docker compose run --rm -i mandate-gateway
+  # ("-i" is the compose-run equivalent of `docker run -i`: it keeps
+  # stdin open and attached instead of closing it immediately). The demo
+  # runs mandate-gateway natively, not containerized — this service exists
+  # so the image builds and the binary is reachable, not as a tested
+  # runtime path.
+  mandate-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: mandate:latest
+    container_name: mandate-gateway
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgres://postgres:password@mandate-postgres-docker:5432/mandate_test?sslmode=disable
+    depends_on:
+      mandate-postgres-docker:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    entrypoint: ["/app/mandate-gateway"]
+    stdin_open: true
+    profiles: ["tools"]
