@@ -15,20 +15,26 @@ import (
 	"github.com/R-Abinav/mandate/internal/policy"
 )
 
-// PolicyRoundTripper wraps an underlying http.RoundTripper and enforces a
-// single policy.Policy against every outbound Razorpay write request before
-// it reaches the network. It is installed as the razorpay-go SDK client's
-// HTTPClient.Transport, so every write call from every internal/mandate
-// function passes through it transparently.
+// PolicyRoundTripper wraps an underlying http.RoundTripper and enforces
+// per-agent policy.Policy scoping against every outbound Razorpay write
+// request before it reaches the network. It is installed as the
+// razorpay-go SDK client's HTTPClient.Transport, so every write call from
+// every internal/mandate function passes through it transparently.
 //
-// PolicyRoundTripper enforces exactly one policy per running process. There
-// is no per-request agent_id routing to a different policy — that is a
-// deliberate scope decision, not an oversight; see
-// docs/adr/0004_transport_layer_gateway.md. Multi-agent, multi-policy
-// scoping is Phase 6.
+// PolicyRoundTripper resolves a policy per request, keyed by the agent_id
+// carried in notes.mandate_agent_id on the wire (Classify extracts it the
+// same way it already extracts notes.mandate_request_id). This replaced the
+// original single-policy-at-boot design — see
+// docs/adr/0004_transport_layer_gateway.md for that original scope decision
+// and docs/adr/0006_multi_agent_scoping.md for why and how it changed. A
+// request with no resolvable agent_id is rejected immediately
+// (policy.ErrMissingAgentID) — there is no fallback policy anywhere in this
+// type.
 type PolicyRoundTripper struct {
-	// Policy is the single policy enforced by this RoundTripper instance.
-	Policy policy.Policy
+	// Resolver looks up the one policy belonging to a given agent_id.
+	// Never returns a default/fallback policy for an unresolvable agent —
+	// see policy.PolicyResolver's doc comment.
+	Resolver policy.PolicyResolver
 
 	// Store is the policy data store TryRecordDebit is delegated to.
 	Store policy.Store
@@ -84,7 +90,7 @@ func (p *PolicyRoundTripper) RoundTrip(req *http.Request) (*http.Response, error
 		req.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 	}
 
-	category, amountPaise, requestID, ok := Classify(req, bodyBytes)
+	category, amountPaise, requestID, agentID, ok := Classify(req, bodyBytes)
 
 	if category == CategoryReadOnly {
 		return p.next().RoundTrip(req)
@@ -104,32 +110,22 @@ func (p *PolicyRoundTripper) RoundTrip(req *http.Request) (*http.Response, error
 		auditRequestID = contentIdempotencyKey(bodyBytes)
 	}
 
-	if !ok {
-		p.logDecision(
-			req,
-			"",
-			0,
-			policy.Decision{Allowed: false, Reason: "unrecognized_write"},
-			nil,
-		)
-		p.logResolved(req.Context(), audit.Payload{
-			RequestID:   auditRequestID,
-			PolicyID:    p.Policy.ID,
-			AgentID:     p.Policy.AgentID,
-			Category:    category,
-			AmountPaise: amountPaise,
-			Decision:    audit.DecisionDenied,
-			Reason:      "unrecognized_write",
-		})
-		return syntheticDenialResponse(req, "unrecognized_write"), nil
+	// resolveWritePolicy owns every early-exit between classification and
+	// evaluation (unrecognized write, missing agent_id, unresolvable
+	// agent_id) — pulled out of RoundTrip itself specifically to keep this
+	// function's branching readable and under gocyclo's threshold. A
+	// non-nil resp means RoundTrip must return it immediately; pol is the
+	// zero value in that case and must not be used.
+	pol, resp := p.resolveWritePolicy(req, category, amountPaise, auditRequestID, agentID, ok)
+	if resp != nil {
+		return resp, nil
 	}
-
 	requestID = auditRequestID
 
 	debitReq := policy.DebitRequest{
-		PolicyID:    p.Policy.ID,
+		PolicyID:    pol.ID,
 		RequestID:   requestID,
-		AgentID:     p.Policy.AgentID,
+		AgentID:     pol.AgentID,
 		Category:    category,
 		AmountPaise: amountPaise,
 	}
@@ -140,7 +136,7 @@ func (p *PolicyRoundTripper) RoundTrip(req *http.Request) (*http.Response, error
 	// call below (logResolved, LogIntent) happens strictly after this line,
 	// by construction: Go's synchronous call semantics mean nothing past
 	// this point can execute while Evaluate's transaction is still open.
-	decision, err := policy.Evaluate(req.Context(), debitReq, p.Policy, p.Store)
+	decision, err := policy.Evaluate(req.Context(), debitReq, pol, p.Store)
 	if err != nil {
 		// err != nil means "we don't know" (ADR-0002): a system failure —
 		// lock contention exhausted, store unreachable, policy not found —
@@ -152,8 +148,8 @@ func (p *PolicyRoundTripper) RoundTrip(req *http.Request) (*http.Response, error
 		p.logDecision(req, category, amountPaise, policy.Decision{}, err)
 		p.logResolved(req.Context(), audit.Payload{
 			RequestID:   requestID,
-			PolicyID:    p.Policy.ID,
-			AgentID:     p.Policy.AgentID,
+			PolicyID:    pol.ID,
+			AgentID:     pol.AgentID,
 			Category:    category,
 			AmountPaise: amountPaise,
 			Decision:    audit.DecisionSystemError,
@@ -167,8 +163,8 @@ func (p *PolicyRoundTripper) RoundTrip(req *http.Request) (*http.Response, error
 	if !decision.Allowed {
 		p.logResolved(req.Context(), audit.Payload{
 			RequestID:   requestID,
-			PolicyID:    p.Policy.ID,
-			AgentID:     p.Policy.AgentID,
+			PolicyID:    pol.ID,
+			AgentID:     pol.AgentID,
 			Category:    category,
 			AmountPaise: amountPaise,
 			Decision:    audit.DecisionDenied,
@@ -198,8 +194,8 @@ func (p *PolicyRoundTripper) RoundTrip(req *http.Request) (*http.Response, error
 	if p.AuditStore != nil {
 		entry, intentErr := audit.LogIntent(req.Context(), p.AuditStore, audit.Payload{
 			RequestID:   requestID,
-			PolicyID:    p.Policy.ID,
-			AgentID:     p.Policy.AgentID,
+			PolicyID:    pol.ID,
+			AgentID:     pol.AgentID,
 			Category:    category,
 			AmountPaise: amountPaise,
 			Decision:    audit.DecisionAllowed,
@@ -238,6 +234,90 @@ func (p *PolicyRoundTripper) RoundTrip(req *http.Request) (*http.Response, error
 	}
 
 	return resp, rtErr
+}
+
+// resolveWritePolicy handles everything between classification and policy
+// evaluation for a recognized write attempt: denying an unrecognized write,
+// denying a recognized write with no agent_id (policy.RequireAgentID —
+// never defaulted, never inferred), and resolving the agent's policy via
+// Resolver. A non-nil *http.Response return means the caller must return it
+// immediately, unevaluated; the returned policy.Policy is the zero value in
+// that case.
+func (p *PolicyRoundTripper) resolveWritePolicy(
+	req *http.Request,
+	category string,
+	amountPaise int64,
+	requestID, agentID string,
+	ok bool,
+) (policy.Policy, *http.Response) {
+	if !ok {
+		// No policy was ever resolved for this request — it never got far
+		// enough to know which agent it might belong to. PolicyID/AgentID
+		// are left empty rather than attributed to any specific agent.
+		p.logDecision(
+			req,
+			"",
+			0,
+			policy.Decision{Allowed: false, Reason: "unrecognized_write"},
+			nil,
+		)
+		p.logResolved(req.Context(), audit.Payload{
+			RequestID:   requestID,
+			Category:    category,
+			AmountPaise: amountPaise,
+			Decision:    audit.DecisionDenied,
+			Reason:      "unrecognized_write",
+		})
+		return policy.Policy{}, syntheticDenialResponse(req, "unrecognized_write")
+	}
+
+	// Every recognized write must carry a resolvable agent_id before any
+	// policy lookup is attempted — never defaulted, never inferred. This is
+	// a genuine policy decision ("we know, and it's no": a request with no
+	// agent attribution can never be evaluated), not a system failure, so
+	// it gets the same 403/DecisionDenied shape as unrecognized_write, not
+	// a 503.
+	if err := policy.RequireAgentID(agentID); err != nil {
+		p.logDecision(
+			req,
+			category,
+			amountPaise,
+			policy.Decision{Allowed: false, Reason: "missing_agent_id"},
+			nil,
+		)
+		p.logResolved(req.Context(), audit.Payload{
+			RequestID:   requestID,
+			Category:    category,
+			AmountPaise: amountPaise,
+			Decision:    audit.DecisionDenied,
+			Reason:      "missing_agent_id",
+		})
+		return policy.Policy{}, syntheticDenialResponse(req, "missing_agent_id")
+	}
+
+	// Resolve the one policy belonging to agentID. A lookup failure here —
+	// most commonly policy.ErrPolicyNotFound, an agent with no configured
+	// policy at all — is "we don't know" (ADR-0002), the same
+	// classification GetPolicy(by ID) already carries: a configuration gap
+	// upstream of this request, never a policy decision. AgentID is still
+	// attached to the audit entry even though no policy resolved for it —
+	// unlike the missing-agent_id case above, the identity claim itself is
+	// present and worth recording.
+	pol, err := p.Resolver.GetPolicyByAgentID(req.Context(), agentID)
+	if err != nil {
+		p.logDecision(req, category, amountPaise, policy.Decision{}, err)
+		p.logResolved(req.Context(), audit.Payload{
+			RequestID:   requestID,
+			AgentID:     agentID,
+			Category:    category,
+			AmountPaise: amountPaise,
+			Decision:    audit.DecisionSystemError,
+			Reason:      err.Error(),
+		})
+		return policy.Policy{}, syntheticSystemErrorResponse(req, err)
+	}
+
+	return pol, nil
 }
 
 // logResolved records a single, already-resolved audit entry for a request

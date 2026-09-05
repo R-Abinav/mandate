@@ -45,9 +45,9 @@ func TestPolicyRoundTripper_Deny_NeverTouchesNetwork(t *testing.T) {
 	fakeStore.Policies[pol.ID] = pol
 
 	rt := &PolicyRoundTripper{
-		Policy: pol,
-		Store:  fakeStore,
-		Next:   http.DefaultTransport,
+		Resolver: fakeStore,
+		Store:    fakeStore,
+		Next:     http.DefaultTransport,
 	}
 
 	client := &http.Client{Transport: rt}
@@ -55,7 +55,7 @@ func TestPolicyRoundTripper_Deny_NeverTouchesNetwork(t *testing.T) {
 	// AmountPaise exceeds PerDebitCapPaise (50000) — denied purely by the
 	// in-memory check in policy.Evaluate, before any store call.
 	body := []byte(
-		`{"amount":300000,"currency":"INR","order_id":"order_x","token":"token_x","recurring":true}`,
+		`{"amount":300000,"currency":"INR","order_id":"order_x","token":"token_x","recurring":true,"notes":{"mandate_agent_id":"agent_test"}}`,
 	)
 	req, err := http.NewRequest(
 		http.MethodPost,
@@ -106,14 +106,14 @@ func TestPolicyRoundTripper_Allow_BodyReachesMockIntact(t *testing.T) {
 	fakeStore.Policies[pol.ID] = pol
 
 	rt := &PolicyRoundTripper{
-		Policy: pol,
-		Store:  fakeStore,
-		Next:   http.DefaultTransport,
+		Resolver: fakeStore,
+		Store:    fakeStore,
+		Next:     http.DefaultTransport,
 	}
 	client := &http.Client{Transport: rt}
 
 	body := []byte(
-		`{"amount":10000,"currency":"INR","order_id":"order_x","token":"token_x","recurring":true}`,
+		`{"amount":10000,"currency":"INR","order_id":"order_x","token":"token_x","recurring":true,"notes":{"mandate_agent_id":"agent_test"}}`,
 	)
 	req, err := http.NewRequest(
 		http.MethodPost,
@@ -169,7 +169,7 @@ func TestPolicyRoundTripper_ReadOnly_AlwaysForwards(t *testing.T) {
 	}
 	fakeStore.Policies[pol.ID] = pol
 
-	rt := &PolicyRoundTripper{Policy: pol, Store: fakeStore, Next: http.DefaultTransport}
+	rt := &PolicyRoundTripper{Resolver: fakeStore, Store: fakeStore, Next: http.DefaultTransport}
 	client := &http.Client{Transport: rt}
 
 	req, err := http.NewRequest(http.MethodGet, upstream.URL+"/v1/customers/cust_x/tokens", nil)
@@ -205,7 +205,7 @@ func TestPolicyRoundTripper_UnrecognizedWrite_DeniedByDefault(t *testing.T) {
 	pol := newTestPolicy()
 	fakeStore.Policies[pol.ID] = pol
 
-	rt := &PolicyRoundTripper{Policy: pol, Store: fakeStore, Next: http.DefaultTransport}
+	rt := &PolicyRoundTripper{Resolver: fakeStore, Store: fakeStore, Next: http.DefaultTransport}
 	client := &http.Client{Transport: rt}
 
 	req, err := http.NewRequest(
@@ -248,10 +248,10 @@ func TestPolicyRoundTripper_RedactsAuthorization(t *testing.T) {
 
 	var logBuf bytes.Buffer
 	rt := &PolicyRoundTripper{
-		Policy: pol,
-		Store:  fakeStore,
-		Next:   http.DefaultTransport,
-		Logger: log.New(&logBuf, "", 0),
+		Resolver: fakeStore,
+		Store:    fakeStore,
+		Next:     http.DefaultTransport,
+		Logger:   log.New(&logBuf, "", 0),
 	}
 	client := &http.Client{Transport: rt}
 
@@ -259,7 +259,7 @@ func TestPolicyRoundTripper_RedactsAuthorization(t *testing.T) {
 		body := []byte(
 			`{"amount":` + strconv.Itoa(
 				amountPaise,
-			) + `,"currency":"INR","order_id":"order_x","token":"token_x","recurring":true}`,
+			) + `,"currency":"INR","order_id":"order_x","token":"token_x","recurring":true,"notes":{"mandate_agent_id":"agent_test"}}`,
 		)
 		req, err := http.NewRequest(
 			http.MethodPost,
@@ -322,7 +322,7 @@ func TestPolicyRoundTripper_RetryWithSameRequestID_NotDoubleCounted(t *testing.T
 	}
 	fakeStore.Policies[pol.ID] = pol
 
-	rt := &PolicyRoundTripper{Policy: pol, Store: fakeStore, Next: http.DefaultTransport}
+	rt := &PolicyRoundTripper{Resolver: fakeStore, Store: fakeStore, Next: http.DefaultTransport}
 	client := &http.Client{Transport: rt}
 
 	const sharedRequestID = "req_retry_same_logical_debit"
@@ -330,7 +330,7 @@ func TestPolicyRoundTripper_RetryWithSameRequestID_NotDoubleCounted(t *testing.T
 	attempt := func(orderID string) *http.Response {
 		body := []byte(
 			`{"amount":60000,"currency":"INR","order_id":"` + orderID +
-				`","token":"token_x","recurring":true,"notes":{"mandate_request_id":"` + sharedRequestID + `"}}`,
+				`","token":"token_x","recurring":true,"notes":{"mandate_request_id":"` + sharedRequestID + `","mandate_agent_id":"agent_test"}}`,
 		)
 		req, err := http.NewRequest(
 			http.MethodPost,
@@ -413,15 +413,17 @@ func TestPolicyRoundTripper_SystemError_Returns503NotDenial(t *testing.T) {
 	defer upstream.Close()
 
 	pol := newTestPolicy()
+	fakeResolver := store.NewFakePolicyStore()
+	fakeResolver.Policies[pol.ID] = pol
 	rt := &PolicyRoundTripper{
-		Policy: pol,
-		Store:  &erroringStore{err: policy.ErrStoreUnavailable},
-		Next:   http.DefaultTransport,
+		Resolver: fakeResolver,
+		Store:    &erroringStore{err: policy.ErrStoreUnavailable},
+		Next:     http.DefaultTransport,
 	}
 	client := &http.Client{Transport: rt}
 
 	body := []byte(
-		`{"amount":10000,"currency":"INR","order_id":"order_x","token":"token_x","recurring":true}`,
+		`{"amount":10000,"currency":"INR","order_id":"order_x","token":"token_x","recurring":true,"notes":{"mandate_agent_id":"agent_test"}}`,
 	)
 	req, err := http.NewRequest(
 		http.MethodPost,
@@ -447,4 +449,93 @@ func TestPolicyRoundTripper_SystemError_Returns503NotDenial(t *testing.T) {
 	if upstreamCalled != 0 {
 		t.Fatalf("expected zero upstream calls when the store errors, got %d", upstreamCalled)
 	}
+}
+
+// TestPolicyRoundTripper_MissingAgentID_DeniedImmediately proves the
+// structural claim internal/policy/scope.go's ErrMissingAgentID exists for:
+// a recognized write with no notes.mandate_agent_id is denied before the
+// Resolver is ever consulted — panicResolver below panics if called at all,
+// so this test fails loudly (not just with a wrong status code) if that
+// ordering ever regresses.
+func TestPolicyRoundTripper_MissingAgentID_DeniedImmediately(t *testing.T) {
+	upstream := noUpstreamServer(t)
+	defer upstream.Close()
+
+	rt := &PolicyRoundTripper{
+		Resolver: panicResolver{},
+		Store:    &erroringStore{err: policy.ErrStoreUnavailable},
+		Next:     http.DefaultTransport,
+	}
+	client := &http.Client{Transport: rt}
+
+	// No notes field at all — no mandate_agent_id.
+	body := []byte(
+		`{"amount":10000,"currency":"INR","order_id":"order_x","token":"token_x","recurring":true}`,
+	)
+	req, err := http.NewRequest(
+		http.MethodPost,
+		upstream.URL+debitExecutionPath,
+		bytes.NewReader(body),
+	)
+	if err != nil {
+		t.Fatalf("failed to build request: %v", err)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("unexpected transport error: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("expected 403 for a missing agent_id, got %d", resp.StatusCode)
+	}
+}
+
+// TestPolicyRoundTripper_UnknownAgentID_Returns503 confirms an agent_id
+// that resolves to no policy at all is a system-failure ("we don't know"),
+// not a policy denial — same 503 shape as every other ADR-0002 system
+// error, so a caller can tell it apart from a genuine denial by status code
+// alone.
+func TestPolicyRoundTripper_UnknownAgentID_Returns503(t *testing.T) {
+	upstream := noUpstreamServer(t)
+	defer upstream.Close()
+
+	rt := &PolicyRoundTripper{
+		Resolver: store.NewFakePolicyStore(), // empty — no policy for any agent
+		Store:    &erroringStore{err: policy.ErrStoreUnavailable},
+		Next:     http.DefaultTransport,
+	}
+	client := &http.Client{Transport: rt}
+
+	body := []byte(
+		`{"amount":10000,"currency":"INR","order_id":"order_x","token":"token_x","recurring":true,"notes":{"mandate_agent_id":"agent_nobody_configured"}}`,
+	)
+	req, err := http.NewRequest(
+		http.MethodPost,
+		upstream.URL+debitExecutionPath,
+		bytes.NewReader(body),
+	)
+	if err != nil {
+		t.Fatalf("failed to build request: %v", err)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("unexpected transport error: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503 for an agent_id with no configured policy, got %d", resp.StatusCode)
+	}
+}
+
+// panicResolver is a policy.PolicyResolver that panics if ever called —
+// used to prove the missing-agent_id gate short-circuits strictly before
+// policy resolution, not just before the eventual HTTP status is decided.
+type panicResolver struct{}
+
+func (panicResolver) GetPolicyByAgentID(_ context.Context, _ string) (policy.Policy, error) {
+	panic("GetPolicyByAgentID must never be called when agent_id is missing")
 }

@@ -6,14 +6,11 @@
 package main
 
 import (
-	"context"
 	"database/sql"
 	"errors"
 	"fmt"
 	"log"
 	"net/http"
-	"os"
-	"strings"
 
 	"github.com/R-Abinav/mandate/internal/audit"
 	"github.com/R-Abinav/mandate/internal/config"
@@ -42,22 +39,6 @@ func run() error {
 		return errors.New("mandate-gateway: DATABASE_URL is required")
 	}
 
-	// The process enforces exactly one policy — see
-	// docs/adr/0004_transport_layer_gateway.md for why per-agent routing to
-	// different policies is explicitly out of scope here (Phase 6).
-	//
-	// Trimmed and checked for control characters before it is ever used in a
-	// log line or a query parameter: an env-derived value must be validated
-	// before use, not passed through untouched on the assumption that
-	// nothing hostile can reach process environment variables.
-	policyID := strings.TrimSpace(os.Getenv("MANDATE_POLICY_ID"))
-	if policyID == "" {
-		return errors.New("mandate-gateway: MANDATE_POLICY_ID is required")
-	}
-	if strings.ContainsAny(policyID, "\r\n") {
-		return errors.New("mandate-gateway: MANDATE_POLICY_ID must not contain control characters")
-	}
-
 	db, err := sql.Open("postgres", cfg.DatabaseURL)
 	if err != nil {
 		return fmt.Errorf("mandate-gateway: failed to open database: %w", err)
@@ -75,34 +56,33 @@ func run() error {
 	policyStore := store.NewPostgresPolicyStore(db)
 	auditStore := audit.NewPostgresStore(db)
 
-	pol, err := policyStore.GetPolicy(context.Background(), policyID)
-	if err != nil {
-		return fmt.Errorf("mandate-gateway: failed to load policy %q: %w", policyID, err)
-	}
-
-	// The first real construction site for *razorpay.Client in this
-	// project. PolicyRoundTripper is installed as client.HTTPClient's
-	// Transport — client.HTTPClient is a promoted field from the SDK's
-	// embedded *requests.Request (not client.Client) — before any
-	// internal/mandate call ever fires, so every write it makes is gated
-	// and every decision is recorded to the hash-chained audit log.
+	// Multi-agent scoping (docs/adr/0006_multi_agent_scoping.md) replaced
+	// the single-policy-at-boot model this process used through Phase 5.
+	// There is no longer one Policy value loaded here: PolicyRoundTripper
+	// now resolves a policy per request, keyed by the agent_id carried in
+	// notes.mandate_agent_id on the wire. policyStore satisfies
+	// policy.PolicyResolver structurally (GetPolicyByAgentID) — the same
+	// value already used for Store (TryRecordDebit), no separate resolver
+	// type needed.
+	//
+	// MANDATE_POLICY_ID is gone, not repurposed as a fallback/default
+	// policy for a request with no resolvable agent_id: internal/policy's
+	// RequireAgentID rejects that case outright
+	// (policy.ErrMissingAgentID), and a fallback policy would silently
+	// reintroduce exactly the default this design forbids. See
+	// docs/adr/0006_multi_agent_scoping.md's "MANDATE_POLICY_ID" section
+	// for the explicit reasoning.
 	client := razorpay.NewClient(cfg.RazorpayKeyID, cfg.RazorpayKeySecret)
 	client.HTTPClient = &http.Client{
 		Transport: &gateway.PolicyRoundTripper{
-			Policy:     pol,
+			Resolver:   policyStore,
 			Store:      policyStore,
 			AuditStore: auditStore,
 			Next:       http.DefaultTransport,
 		},
 	}
 
-	log.Printf(
-		"mandate-gateway: configured — policy_id=%s agent_id=%s per_debit_cap_paise=%d cumulative_cap_paise=%d",
-		pol.ID,
-		pol.AgentID,
-		pol.PerDebitCapPaise,
-		pol.CumulativeCapPaise,
-	)
+	log.Print("mandate-gateway: configured — resolving policies per request by agent_id")
 
 	// Wiring only, for this phase: client is fully gated and ready. Future
 	// phases attach the actual serving surface (MCP tools, audit logging)

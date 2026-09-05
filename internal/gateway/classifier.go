@@ -63,6 +63,14 @@ const debitExecutionPath = "/v1/payments/create/recurring"
 // RequestID field unset — a caller bug, not a structural gap in this
 // endpoint or category; see ADR-0004.
 //
+// agentID is read from notes.mandate_agent_id the same way, for both
+// recognized categories — the same wire mechanism as requestID, set from
+// DebitParams.AgentID / RegistrationLinkParams.AgentID (see
+// docs/adr/0006_multi_agent_scoping.md). Unlike requestID, an empty agentID
+// is never tolerated downstream: PolicyRoundTripper rejects it outright
+// (policy.ErrMissingAgentID) rather than falling back to anything — there
+// is no default policy to attribute an unattributed request to.
+//
 // Anything else write-shaped — any non-GET request that isn't one of the two
 // known paths, or a known path whose body doesn't parse the way it should —
 // returns ok=false. The caller must deny by default: an unrecognized write
@@ -70,33 +78,35 @@ const debitExecutionPath = "/v1/payments/create/recurring"
 func Classify(
 	req *http.Request,
 	body []byte,
-) (category string, amountPaise int64, requestID string, ok bool) {
+) (category string, amountPaise int64, requestID string, agentID string, ok bool) {
 	if req.Method == http.MethodGet {
-		return CategoryReadOnly, 0, "", true
+		return CategoryReadOnly, 0, "", "", true
 	}
 
 	if req.Method != http.MethodPost {
-		return "", 0, "", false
+		return "", 0, "", "", false
 	}
 
 	switch req.URL.Path {
 	case registrationLinkPath:
 		amount, found := extractNestedAmount(body, "subscription_registration", "max_amount")
 		if !found {
-			return "", 0, "", false
+			return "", 0, "", "", false
 		}
 		reqID, _ := extractNestedString(body, "notes", "mandate_request_id")
-		return CategoryRegistration, amount, reqID, true
+		agentID, _ := extractNestedString(body, "notes", "mandate_agent_id")
+		return CategoryRegistration, amount, reqID, agentID, true
 
 	case debitExecutionPath:
 		amount, found := extractTopLevelAmount(body, "amount")
 		if !found {
-			return "", 0, "", false
+			return "", 0, "", "", false
 		}
 		reqID, _ := extractNestedString(body, "notes", "mandate_request_id")
-		return CategoryDebitExecution, amount, reqID, true
+		agentID, _ := extractNestedString(body, "notes", "mandate_agent_id")
+		return CategoryDebitExecution, amount, reqID, agentID, true
 
 	default:
-		return "", 0, "", false
+		return "", 0, "", "", false
 	}
 }

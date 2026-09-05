@@ -149,6 +149,7 @@ func ExecuteMandateDebit(
 		"email":       email,
 		"notes": map[string]interface{}{
 			"mandate_request_id": params.RequestID,
+			"mandate_agent_id":   params.AgentID,
 		},
 	}
 

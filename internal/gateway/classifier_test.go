@@ -17,10 +17,10 @@ func newRequest(t *testing.T, method, path string) *http.Request {
 func TestClassify_Registration(t *testing.T) {
 	req := newRequest(t, http.MethodPost, registrationLinkPath)
 	body := []byte(
-		`{"type":"link","amount":100,"subscription_registration":{"method":"card","max_amount":200000},"notes":{"mandate_request_id":"req_reg_456"}}`,
+		`{"type":"link","amount":100,"subscription_registration":{"method":"card","max_amount":200000},"notes":{"mandate_request_id":"req_reg_456","mandate_agent_id":"agent_456"}}`,
 	)
 
-	category, amountPaise, requestID, ok := Classify(req, body)
+	category, amountPaise, requestID, agentID, ok := Classify(req, body)
 	if !ok {
 		t.Fatal("expected ok=true for a well-formed registration link request")
 	}
@@ -36,18 +36,23 @@ func TestClassify_Registration(t *testing.T) {
 	if requestID != "req_reg_456" {
 		t.Fatalf("expected requestID extracted from notes.mandate_request_id, got %q", requestID)
 	}
+	if agentID != "agent_456" {
+		t.Fatalf("expected agentID extracted from notes.mandate_agent_id, got %q", agentID)
+	}
 }
 
 func TestClassify_Registration_MissingNotes(t *testing.T) {
-	// A caller that leaves RegistrationLinkParams.RequestID unset produces
-	// no notes field — classification must still succeed, requestID is
-	// simply empty (the roundtripper's content-hash fallback handles this).
+	// A caller that leaves RegistrationLinkParams.RequestID/AgentID unset
+	// produces no notes field — classification must still succeed, both
+	// requestID and agentID are simply empty (the roundtripper's
+	// content-hash fallback and ErrMissingAgentID rejection handle these
+	// respectively, downstream of Classify).
 	req := newRequest(t, http.MethodPost, registrationLinkPath)
 	body := []byte(
 		`{"type":"link","amount":100,"subscription_registration":{"method":"card","max_amount":200000}}`,
 	)
 
-	category, amountPaise, requestID, ok := Classify(req, body)
+	category, amountPaise, requestID, agentID, ok := Classify(req, body)
 	if !ok || category != CategoryRegistration || amountPaise != 200000 {
 		t.Fatalf(
 			"expected a successful classification, got category=%q amount=%d ok=%v",
@@ -59,15 +64,18 @@ func TestClassify_Registration_MissingNotes(t *testing.T) {
 	if requestID != "" {
 		t.Fatalf("expected empty requestID when notes is absent, got %q", requestID)
 	}
+	if agentID != "" {
+		t.Fatalf("expected empty agentID when notes is absent, got %q", agentID)
+	}
 }
 
 func TestClassify_DebitExecution(t *testing.T) {
 	req := newRequest(t, http.MethodPost, debitExecutionPath)
 	body := []byte(
-		`{"amount":10000,"currency":"INR","order_id":"order_x","token":"token_x","recurring":true,"notes":{"mandate_request_id":"req_abc123"}}`,
+		`{"amount":10000,"currency":"INR","order_id":"order_x","token":"token_x","recurring":true,"notes":{"mandate_request_id":"req_abc123","mandate_agent_id":"agent_abc123"}}`,
 	)
 
-	category, amountPaise, requestID, ok := Classify(req, body)
+	category, amountPaise, requestID, agentID, ok := Classify(req, body)
 	if !ok {
 		t.Fatal("expected ok=true for a well-formed debit execution request")
 	}
@@ -80,17 +88,21 @@ func TestClassify_DebitExecution(t *testing.T) {
 	if requestID != "req_abc123" {
 		t.Fatalf("expected requestID extracted from notes.mandate_request_id, got %q", requestID)
 	}
+	if agentID != "agent_abc123" {
+		t.Fatalf("expected agentID extracted from notes.mandate_agent_id, got %q", agentID)
+	}
 }
 
 func TestClassify_DebitExecution_MissingNotes(t *testing.T) {
 	// A debit_execution request with no notes field at all must still
-	// classify successfully — requestID is simply empty, not a failure.
+	// classify successfully — requestID and agentID are simply empty, not a
+	// failure.
 	req := newRequest(t, http.MethodPost, debitExecutionPath)
 	body := []byte(
 		`{"amount":10000,"currency":"INR","order_id":"order_x","token":"token_x","recurring":true}`,
 	)
 
-	category, amountPaise, requestID, ok := Classify(req, body)
+	category, amountPaise, requestID, agentID, ok := Classify(req, body)
 	if !ok || category != CategoryDebitExecution || amountPaise != 10000 {
 		t.Fatalf(
 			"expected a successful classification, got category=%q amount=%d ok=%v",
@@ -102,15 +114,40 @@ func TestClassify_DebitExecution_MissingNotes(t *testing.T) {
 	if requestID != "" {
 		t.Fatalf("expected empty requestID when notes is absent, got %q", requestID)
 	}
+	if agentID != "" {
+		t.Fatalf("expected empty agentID when notes is absent, got %q", agentID)
+	}
+}
+
+// TestClassify_DebitExecution_AgentIDPresentRequestIDAbsent confirms the two
+// notes fields are extracted independently — a caller could (incorrectly)
+// leave one unset without affecting extraction of the other.
+func TestClassify_DebitExecution_AgentIDPresentRequestIDAbsent(t *testing.T) {
+	req := newRequest(t, http.MethodPost, debitExecutionPath)
+	body := []byte(
+		`{"amount":10000,"currency":"INR","order_id":"order_x","token":"token_x","recurring":true,"notes":{"mandate_agent_id":"agent_only"}}`,
+	)
+
+	_, _, requestID, agentID, ok := Classify(req, body)
+	if !ok {
+		t.Fatal("expected ok=true even with requestID absent")
+	}
+	if requestID != "" {
+		t.Fatalf("expected empty requestID, got %q", requestID)
+	}
+	if agentID != "agent_only" {
+		t.Fatalf("expected agentID=%q, got %q", "agent_only", agentID)
+	}
 }
 
 func TestClassify_ReadOnly(t *testing.T) {
 	// Any GET, regardless of path, must be read_only and never gated —
 	// this is what internal/mandate's polling (FetchTokenStatus,
-	// WaitForNewConfirmedToken) depends on.
+	// WaitForNewConfirmedToken) depends on. No agent_id is required for a
+	// read: GETs bypass policy entirely, before agent scoping ever applies.
 	req := newRequest(t, http.MethodGet, "/v1/customers/cust_x/tokens/token_x")
 
-	category, amountPaise, requestID, ok := Classify(req, nil)
+	category, amountPaise, requestID, agentID, ok := Classify(req, nil)
 	if !ok {
 		t.Fatal("expected ok=true for any GET request")
 	}
@@ -123,6 +160,9 @@ func TestClassify_ReadOnly(t *testing.T) {
 	if requestID != "" {
 		t.Fatalf("expected empty requestID for a read-only request, got %q", requestID)
 	}
+	if agentID != "" {
+		t.Fatalf("expected empty agentID for a read-only request, got %q", agentID)
+	}
 }
 
 func TestClassify_ReadOnly_TokenListingPoll(t *testing.T) {
@@ -130,7 +170,7 @@ func TestClassify_ReadOnly_TokenListingPoll(t *testing.T) {
 	// Confirm this exact shape also classifies as read-only.
 	req := newRequest(t, http.MethodGet, "/v1/customers/cust_x/tokens")
 
-	category, _, _, ok := Classify(req, nil)
+	category, _, _, _, ok := Classify(req, nil)
 	if !ok || category != CategoryReadOnly {
 		t.Fatalf("expected read_only/ok=true, got category=%q ok=%v", category, ok)
 	}
@@ -140,7 +180,7 @@ func TestClassify_UnrecognizedWrite_UnknownPath(t *testing.T) {
 	req := newRequest(t, http.MethodPost, "/v1/payments/create/upi")
 	body := []byte(`{"amount":100}`)
 
-	_, _, _, ok := Classify(req, body)
+	_, _, _, _, ok := Classify(req, body)
 	if ok {
 		t.Fatal("expected ok=false for an unrecognized write path — must deny by default")
 	}
@@ -149,7 +189,7 @@ func TestClassify_UnrecognizedWrite_UnknownPath(t *testing.T) {
 func TestClassify_UnrecognizedWrite_NonPostMethod(t *testing.T) {
 	req := newRequest(t, http.MethodDelete, debitExecutionPath)
 
-	_, _, _, ok := Classify(req, nil)
+	_, _, _, _, ok := Classify(req, nil)
 	if ok {
 		t.Fatal("expected ok=false for a non-GET, non-POST method — must deny by default")
 	}
@@ -161,7 +201,7 @@ func TestClassify_UnrecognizedWrite_MalformedBody(t *testing.T) {
 	req := newRequest(t, http.MethodPost, debitExecutionPath)
 	body := []byte(`not valid json`)
 
-	_, _, _, ok := Classify(req, body)
+	_, _, _, _, ok := Classify(req, body)
 	if ok {
 		t.Fatal("expected ok=false for a known path with an unparseable body")
 	}
@@ -171,7 +211,7 @@ func TestClassify_UnrecognizedWrite_MissingAmountField(t *testing.T) {
 	req := newRequest(t, http.MethodPost, debitExecutionPath)
 	body := []byte(`{"currency":"INR","order_id":"order_x"}`) // no "amount" field
 
-	_, _, _, ok := Classify(req, body)
+	_, _, _, _, ok := Classify(req, body)
 	if ok {
 		t.Fatal("expected ok=false when the known path's expected amount field is missing")
 	}

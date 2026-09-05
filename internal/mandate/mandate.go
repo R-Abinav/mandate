@@ -40,6 +40,14 @@ type DebitParams struct {
 	RequestID   string // Used for idempotency mapping (e.g., X-Razorpay-Idempotency-Key header)
 	Receipt     string // Deterministically populated from RequestID (e.g., "mandate-debit-" + RequestID) for reconciliation
 	AmountPaise int64
+
+	// AgentID identifies which agent this debit is attributed to — sent as
+	// notes.mandate_agent_id, the same wire mechanism RequestID already
+	// uses (notes.mandate_request_id), so internal/gateway's
+	// PolicyRoundTripper can resolve the caller's specific policy per
+	// request instead of enforcing a single policy loaded once at boot.
+	// See docs/adr/0006_multi_agent_scoping.md.
+	AgentID string
 }
 
 // RegistrationLinkParams holds the parameters required to create a Razorpay
@@ -80,4 +88,10 @@ type RegistrationLinkParams struct {
 	// endpoint already returns "notes":[] on every live response (empty
 	// only because nothing has been sent yet).
 	RequestID string
+
+	// AgentID identifies which agent this registration is attributed to —
+	// sent as notes.mandate_agent_id, the same wire mechanism RequestID
+	// uses (notes.mandate_request_id). See DebitParams.AgentID and
+	// docs/adr/0006_multi_agent_scoping.md.
+	AgentID string
 }
